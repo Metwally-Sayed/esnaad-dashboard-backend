@@ -3,9 +3,6 @@ name: Build and Push Docker Image
 on:
   push:
     branches: [ main ]
-    paths:
-      - 'esnaad-dashboard-backend/**'
-      - '.github/workflows/docker-publish.yml'
   workflow_dispatch:  # Allows manual trigger
 
 env:
@@ -31,8 +28,8 @@ jobs:
       - name: Build and push Docker image
         uses: docker/build-push-action@v4
         with:
-          context: ./esnaad-dashboard-backend
-          file: ./esnaad-dashboard-backend/Dockerfile
+          context: .
+          file: ./Dockerfile
           push: true
           tags: |
             ${{ secrets.DOCKER_HUB_USERNAME }}/esnaad-backend:latest
