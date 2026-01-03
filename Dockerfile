@@ -65,9 +65,10 @@ USER nodejs
 # Expose the port (8080 for claw.cloud)
 EXPOSE 8080
 
-# Health check
+# Health check (uses PORT env variable)
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD node -e "require('http').get('http://localhost:8080/health', (r) => {if (r.statusCode !== 200) process.exit(1)})" || exit 1
+  CMD node -e "const port = process.env.PORT || 8080; require('http').get(`http://localhost:${port}/health`, (r) => {if (r.statusCode !== 200) process.exit(1)})" || exit 1
 
-# Run database migrations and start the application
-CMD ["sh", "-c", "npx prisma migrate deploy && node dist/server.js"]
+# Start the application without automatic migrations
+# To run migrations manually: npx prisma migrate deploy
+CMD ["node", "dist/server.js"]
