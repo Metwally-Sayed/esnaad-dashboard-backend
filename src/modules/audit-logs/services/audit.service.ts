@@ -61,10 +61,19 @@ export class AuditService {
     const { page, limit, sortBy, sortOrder } = getPaginationParams(query);
     const { skip, take } = getPrismaSkipTake(page, limit);
 
-    const where: Prisma.AuditLogWhereInput = {
-      entityType,
-      entityId,
-    };
+    // For unit entities, include both unit-specific logs AND snagging logs for that unit
+    const where: Prisma.AuditLogWhereInput =
+      entityType === 'unit'
+        ? {
+            OR: [
+              { entityType: 'unit', entityId },  // Direct unit operations
+              { unitId: entityId }  // Snagging operations for this unit
+            ]
+          }
+        : {
+            entityType,
+            entityId,
+          };
 
     const orderBy: Prisma.AuditLogOrderByWithRelationInput = {
       [sortBy as keyof Prisma.AuditLogOrderByWithRelationInput]: sortOrder,
