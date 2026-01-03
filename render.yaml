@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: esnaad-backend
+    runtime: node
+    buildCommand: npm install && npm run build && npm run prisma:generate
+    startCommand: npm run prisma:migrate:deploy && npm run start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      # Add other environment variables in Render dashboard
+    healthCheckPath: /health
