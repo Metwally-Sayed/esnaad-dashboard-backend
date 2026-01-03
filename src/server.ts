@@ -3,6 +3,14 @@ import { env } from './config/env';
 import { logger } from './config/logger';
 import { prisma } from './config/database';
 
+// Debug: Check what env vars Koyeb is providing
+console.log('🔍 Environment check:');
+console.log('NODE_ENV:', process.env.NODE_ENV);
+console.log('PORT:', process.env.PORT);
+console.log('DATABASE_URL exists:', !!process.env.DATABASE_URL);
+console.log('JWT_SECRET exists:', !!process.env.JWT_SECRET);
+console.log('All env keys:', Object.keys(process.env).filter(k => !k.startsWith('npm_')));
+
 const startServer = async () => {
   try {
     // Test database connection

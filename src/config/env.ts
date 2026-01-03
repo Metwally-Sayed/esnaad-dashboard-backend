@@ -1,7 +1,20 @@
 import { z } from 'zod';
 import dotenv from 'dotenv';
 
-dotenv.config();
+// Load appropriate .env file
+if (process.env.NODE_ENV === 'production') {
+  // Try to load from Koyeb environment first
+  if (!process.env.DATABASE_URL) {
+    // Fallback to .env.production if Koyeb vars not set
+    dotenv.config({ path: '.env.production' });
+    console.log('📦 Loaded .env.production file');
+  } else {
+    console.log('🚀 Using environment variables from Koyeb');
+  }
+} else {
+  dotenv.config();
+  console.log('💻 Loaded .env file for development');
+}
 
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).optional().default('development'),
@@ -59,6 +72,16 @@ const parseEnv = (): Env => {
       error.issues.forEach((err) => {
         console.error(`  - ${err.path.join('.')}: ${err.message}`);
       });
+
+      if (process.env.NODE_ENV === 'production' || !process.env.DATABASE_URL) {
+        console.error('\n📌 DEPLOYMENT FIX:');
+        console.error('You need to set environment variables in your hosting platform:');
+        console.error('- Koyeb: Dashboard → Service → Settings → Environment Variables');
+        console.error('- Render: Dashboard → Environment → Environment Variables');
+        console.error('- Railway: Dashboard → Variables');
+        console.error('\nDO NOT rely on .env file in production!');
+      }
+
       process.exit(1);
     }
     throw error;
