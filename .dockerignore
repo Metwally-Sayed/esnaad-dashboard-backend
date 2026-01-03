@@ -1,0 +1,75 @@
+# Node modules
+node_modules
+npm-debug.log
+yarn-error.log
+yarn-debug.log
+
+# TypeScript build output (we'll build fresh in Docker)
+dist
+build
+
+# Environment files (will be set via claw.cloud)
+.env
+.env.local
+.env.production
+.env.*.local
+
+# Git files
+.git
+.gitignore
+
+# IDE files
+.vscode
+.idea
+*.swp
+*.swo
+.DS_Store
+
+# Documentation
+*.md
+docs
+LICENSE
+
+# Test files
+*.test.ts
+*.spec.ts
+coverage
+.nyc_output
+
+# CI/CD files
+.github
+.gitlab-ci.yml
+.travis.yml
+
+# Development files
+nodemon.json
+.eslintrc
+.prettierrc
+tsconfig.tsbuildinfo
+
+# Prisma Studio
+.prisma/studio
+
+# Logs
+logs
+*.log
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Temporary files
+tmp
+temp
+*.tmp
+
+# Vercel
+.vercel
+vercel.json
+api

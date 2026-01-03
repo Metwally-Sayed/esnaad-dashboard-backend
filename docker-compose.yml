@@ -1,0 +1,77 @@
+version: '3.8'
+
+services:
+  esnaad-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      # Server Configuration
+      NODE_ENV: production
+      PORT: 8080
+
+      # Database (Neon.tech PostgreSQL) - Replace with your actual values
+      DATABASE_URL: ${DATABASE_URL:-postgresql://neondb_owner:npg_nufspbcK1I2j@ep-bitter-king-agr4hktc-pooler.c-2.eu-central-1.aws.neon.tech/neondb?sslmode=require}
+
+      # JWT Configuration
+      JWT_SECRET: ${JWT_SECRET:-tib6aGUuHbqay11AWvfknZE/vIx8oNSBRPlYYuUfh30=}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-XBMY7Vh3TVp0LPDKDqRIDzLg4MYhXhSB8TkLpu+AMRg=}
+      JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-30d}
+
+      # OTP Configuration
+      OTP_EXPIRES_IN_MINUTES: ${OTP_EXPIRES_IN_MINUTES:-10}
+      OTP_MAX_ATTEMPTS: ${OTP_MAX_ATTEMPTS:-5}
+      OTP_MAX_RESENDS: ${OTP_MAX_RESENDS:-3}
+
+      # Rate Limiting
+      RATE_LIMIT_WINDOW_MS: ${RATE_LIMIT_WINDOW_MS:-900000}
+      RATE_LIMIT_MAX_REQUESTS: ${RATE_LIMIT_MAX_REQUESTS:-100}
+
+      # CORS
+      CORS_ORIGIN: ${CORS_ORIGIN:-*}
+
+      # AWS S3 Configuration (Optional - for snagging attachments)
+      AWS_REGION: ${AWS_REGION:-eu-central-1}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      AWS_S3_BUCKET: ${AWS_S3_BUCKET:-esnaad-dashboard}
+
+    restart: unless-stopped
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+    # Resource limits (adjust based on your needs)
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.5'
+          memory: 256M
+
+  # Optional: Local PostgreSQL for development/testing
+  # Uncomment if you want to run PostgreSQL locally instead of using Neon.tech
+  # postgres:
+  #   image: postgres:15-alpine
+  #   ports:
+  #     - "5432:5432"
+  #   environment:
+  #     POSTGRES_USER: esnaad
+  #     POSTGRES_PASSWORD: esnaad_password
+  #     POSTGRES_DB: esnaad_db
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #   restart: unless-stopped
+
+# volumes:
+#   postgres_data:

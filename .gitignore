@@ -41,8 +41,32 @@ tmp
 temp
 *.tmp
 
-# .mc files
-*.md
+# Specific files to exclude (not all .md and .sh)
+# Keep deployment scripts and documentation in version control
 
-# .sh files
-*.sh
+# Test scripts and files
+test-user-update.sh
+test-snagging.sh
+test-snagging-messages.sh
+test-messages-final.sh
+test-login.json
+test-api.js
+test-all-endpoints.sh
+get-users-with-auth.sh
+test-otp.md
+
+# Documentation files (project specific)
+TREE.md
+START_HERE.md
+README.OLD.md
+README.md
+QUICKSTART.md
+FINAL_SUMMARY.md
+DEPLOYMENT.md
+DEPLOY_CLAWCLOUD.md
+CHANGELOG.md
+CLAUDE.md
+API_DESIGN_SUMMARY.md
+
+# Deployment platform specific files
+Spacefile

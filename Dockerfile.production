@@ -1,0 +1,77 @@
+# Production-optimized Dockerfile with advanced features
+# Multi-stage build for minimal final image size
+
+# Stage 1: Dependencies
+FROM node:18-alpine AS deps
+RUN apk add --no-cache libc6-compat openssl
+WORKDIR /app
+
+# Copy package files
+COPY package.json package-lock.json ./
+COPY prisma ./prisma/
+
+# Install dependencies with cache mount for faster rebuilds
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci --only=production
+
+# Stage 2: Builder
+FROM node:18-alpine AS builder
+RUN apk add --no-cache openssl
+WORKDIR /app
+
+# Copy dependencies from deps stage
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+
+# Generate Prisma Client
+RUN npx prisma generate
+
+# Build the application
+RUN npm run build
+
+# Stage 3: Runner (Production)
+FROM node:18-alpine AS runner
+WORKDIR /app
+
+# Install only runtime dependencies
+RUN apk add --no-cache openssl curl && \
+    addgroup -g 1001 -S nodejs && \
+    adduser -S nodejs -u 1001
+
+# Copy production dependencies
+COPY --from=deps /app/node_modules ./node_modules
+
+# Copy Prisma files
+COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+COPY --from=builder /app/prisma ./prisma
+
+# Copy built application
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/package.json ./package.json
+
+# Create necessary directories with correct permissions
+RUN mkdir -p /app/logs && \
+    chown -R nodejs:nodejs /app
+
+# Switch to non-root user
+USER nodejs
+
+# Expose port
+EXPOSE 8080
+
+# Add labels for better container management
+LABEL maintainer="Esnaad Team" \
+      version="1.0.0" \
+      description="Esnaad Dashboard Backend API"
+
+# Health check with proper timeout
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:8080/health || exit 1
+
+# Use shell form for better signal handling
+ENTRYPOINT ["/bin/sh", "-c"]
+
+# Run migrations and start the application
+# The || true ensures the app starts even if migrations were already applied
+CMD ["npx prisma migrate deploy || true && exec node dist/server.js"]
