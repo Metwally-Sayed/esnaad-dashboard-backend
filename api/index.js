@@ -1,4 +1,6 @@
 // Vercel serverless function wrapper
-const app = require('../dist/app');
+// Use the pre-created app instance
+const { app } = require('../dist/app');
 
+// Export for Vercel
 module.exports = app;

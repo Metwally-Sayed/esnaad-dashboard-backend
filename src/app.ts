@@ -86,3 +86,6 @@ export const createApp = (): Application => {
 
   return app;
 };
+
+// Export a default instance for Vercel
+export const app = createApp();

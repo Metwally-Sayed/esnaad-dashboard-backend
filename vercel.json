@@ -1,18 +1,18 @@
 {
   "version": 2,
-  "builds": [
-    {
-      "src": "api/index.js",
-      "use": "@vercel/node"
+  "buildCommand": "npm install && npm run build && npm run prisma:generate",
+  "outputDirectory": ".",
+  "functions": {
+    "api/index.js": {
+      "maxDuration": 30,
+      "runtime": "nodejs18.x",
+      "includeFiles": "dist/**,node_modules/**,prisma/**"
     }
-  ],
+  },
   "routes": [
     {
       "src": "/(.*)",
       "dest": "/api/index.js"
     }
-  ],
-  "env": {
-    "NODE_ENV": "production"
-  }
+  ]
 }
