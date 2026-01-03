@@ -1,0 +1,273 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  OWNER
+}
+
+enum OtpPurpose {
+  REGISTRATION
+  PASSWORD_RESET
+  EMAIL_VERIFICATION
+}
+
+enum AuditAction {
+  USER_CREATED
+  USER_UPDATED
+  USER_DELETED
+  UNIT_CREATED
+  UNIT_UPDATED
+  UNIT_DELETED
+  UNIT_ASSIGNED
+  UNIT_UNASSIGNED
+  OWNER_CHANGED
+  PROJECT_CREATED
+  PROJECT_UPDATED
+  PROJECT_DELETED
+  SNAGGING_CREATED
+  SNAGGING_UPDATED
+  SNAGGING_DELETED
+  SNAGGING_STATUS_CHANGED
+  SNAGGING_MESSAGE_CREATED
+  SNAGGING_MESSAGE_UPDATED
+  SNAGGING_MESSAGE_DELETED
+}
+
+enum SnaggingStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum SnaggingPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+// Main user model
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  password      String
+  name          String?
+  phone         String?   // Phone number
+  address       String?   @db.Text // Physical address
+  nationalId    String?   @unique // National ID / Iqama number
+  role          Role      @default(OWNER)
+  emailVerified Boolean   @default(false)
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  ownedUnits        Unit[]
+  auditLogs         AuditLog[]
+  otps              Otp[]
+  createdSnaggings  Snagging[]
+  snaggingMessages  SnaggingMessage[]
+
+  @@index([email])
+  @@index([role])
+  @@index([nationalId])
+  @@map("users")
+}
+
+// Projects model
+model Project {
+  id          String    @id @default(cuid())
+  name        String
+  description String?   @db.Text
+  location    String?
+  startDate   DateTime?
+  endDate     DateTime?
+  status      String    @default("active") // active, completed, on-hold
+  imageUrl    String?
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  // Relations
+  units       Unit[]
+
+  @@index([name])
+  @@index([status])
+  @@map("projects")
+}
+
+// Units model
+model Unit {
+  id           String   @id @default(cuid())
+  unitNumber   String   @unique
+  buildingName String?
+  floor        Int?
+  area         Float?
+  bedrooms     Int?
+  bathrooms    Int?
+  description  String?  @db.Text
+  imageUrls    String[] @default([])
+  documentUrls String[] @default([])
+  address      String?
+  amenities    String?
+  unitType     String?
+
+  ownerId      String?
+  projectId    String?
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  owner        User?      @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+  project      Project?   @relation(fields: [projectId], references: [id])
+  auditLogs    AuditLog[]
+  snaggings    Snagging[]
+
+  @@index([unitNumber])
+  @@index([ownerId])
+  @@index([projectId])
+  @@map("units")
+}
+
+// External clients model
+model ExternalClient {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  company   String?
+  verified  Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([email])
+  @@map("external_clients")
+}
+
+// OTP model
+model Otp {
+  id          String     @id @default(cuid())
+  userId      String
+  hashedOtp   String
+  purpose     OtpPurpose
+  expiresAt   DateTime
+  verified    Boolean    @default(false)
+  attempts    Int        @default(0)
+  maxAttempts Int        @default(5)
+  resendCount Int        @default(0)
+  maxResends  Int        @default(3)
+  lastResent  DateTime?
+
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  // Relations
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, purpose, verified])
+  @@index([expiresAt])
+  @@map("otps")
+}
+
+// Audit log model
+model AuditLog {
+  id         String      @id @default(cuid())
+  action     AuditAction
+  entityType String
+  entityId   String
+  actorId    String
+  unitId     String?
+  changes    Json?
+  metadata   Json?
+  ipAddress  String?
+  userAgent  String?
+
+  createdAt  DateTime    @default(now())
+
+  // Relations
+  actor      User        @relation(fields: [actorId], references: [id], onDelete: Cascade)
+  unit       Unit?       @relation(fields: [unitId], references: [id])
+
+  @@index([action])
+  @@index([entityType, entityId])
+  @@index([actorId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// Snagging model
+model Snagging {
+  id              String           @id @default(cuid())
+  unitId          String
+  createdByUserId String
+  title           String
+  description     String           @db.Text
+  status          SnaggingStatus   @default(OPEN)
+  priority        SnaggingPriority @default(MEDIUM)
+  deletedAt       DateTime?
+
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  // Relations
+  unit            Unit             @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  createdBy       User             @relation(fields: [createdByUserId], references: [id], onDelete: Cascade)
+  messages        SnaggingMessage[]
+
+  @@index([unitId, createdAt])
+  @@index([createdByUserId, createdAt])
+  @@index([status, priority])
+  @@index([deletedAt])
+  @@map("snaggings")
+}
+
+// Snagging message model
+model SnaggingMessage {
+  id           String    @id @default(cuid())
+  snaggingId   String
+  authorUserId String
+  authorRole   Role
+  bodyTitle    String?
+  bodyText     String    @db.Text
+  deletedAt    DateTime?
+
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  // Relations
+  snagging     Snagging  @relation(fields: [snaggingId], references: [id], onDelete: Cascade)
+  author       User      @relation(fields: [authorUserId], references: [id], onDelete: Cascade)
+  attachments  SnaggingAttachment[]
+
+  @@index([snaggingId, createdAt])
+  @@index([authorUserId])
+  @@index([deletedAt])
+  @@map("snagging_messages")
+}
+
+// Snagging attachment model
+model SnaggingAttachment {
+  id        String   @id @default(cuid())
+  messageId String
+  url       String
+  fileName  String
+  mimeType  String
+  sizeBytes Int
+
+  createdAt DateTime @default(now())
+
+  // Relations
+  message   SnaggingMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId])
+  @@map("snagging_attachments")
+}
