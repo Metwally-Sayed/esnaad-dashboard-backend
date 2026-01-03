@@ -39,3 +39,9 @@ coverage
 tmp
 temp
 *.tmp
+
+# .mc files
+*.md
+
+# .sh files
+*.sh
