@@ -1,19 +1,12 @@
 import { z } from 'zod';
 import dotenv from 'dotenv';
 
-// Load appropriate .env file
-if (process.env.NODE_ENV === 'production') {
-  // Try to load from Koyeb environment first
-  if (!process.env.DATABASE_URL) {
-    // Fallback to .env.production if Koyeb vars not set
-    dotenv.config({ path: '.env.production' });
-    console.log('📦 Loaded .env.production file');
-  } else {
-    console.log('🚀 Using environment variables from Koyeb');
-  }
-} else {
+// Only load .env file in development
+if (process.env.NODE_ENV !== 'production') {
   dotenv.config();
-  console.log('💻 Loaded .env file for development');
+  console.log('💻 Loading .env file for development');
+} else {
+  console.log('🚀 Running in production - expecting environment variables from platform');
 }
 
 const envSchema = z.object({
