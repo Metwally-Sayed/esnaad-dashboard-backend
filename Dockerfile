@@ -1,6 +1,6 @@
 # Multi-stage build for optimized production image
 # Stage 1: Build stage
-FROM node:18-alpine AS builder
+FROM node:22-alpine AS builder
 
 # Install OpenSSL for Prisma
 RUN apk add --no-cache openssl
@@ -27,7 +27,7 @@ RUN npx prisma generate
 RUN npm run build
 
 # Stage 2: Production stage
-FROM node:18-alpine
+FROM node:22-alpine
 
 # Install OpenSSL for Prisma (required at runtime)
 RUN apk add --no-cache openssl
