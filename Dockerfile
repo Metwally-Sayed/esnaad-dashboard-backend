@@ -52,9 +52,14 @@ COPY --from=builder /app/prisma ./prisma
 # Copy built application from builder stage
 COPY --from=builder /app/dist ./dist
 
+# Copy tsconfig files for path resolution
+COPY --from=builder /app/tsconfig.json ./tsconfig.json
+COPY --from=builder /app/tsconfig-paths-bootstrap.js ./tsconfig-paths-bootstrap.js
+
 # Copy node_modules with generated Prisma Client from builder
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+COPY --from=builder /app/node_modules/tsconfig-paths ./node_modules/tsconfig-paths
 
 # Change ownership to nodejs user
 RUN chown -R nodejs:nodejs /app
@@ -71,4 +76,4 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
 
 # Start the application without automatic migrations
 # To run migrations manually: npx prisma migrate deploy
-CMD ["node", "dist/server.js"]
+CMD ["npm", "start"]
