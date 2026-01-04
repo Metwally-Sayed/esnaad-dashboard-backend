@@ -75,7 +75,7 @@ export class DocumentService {
         }
       });
 
-      return pdf;
+      return Buffer.from(pdf);
     } finally {
       await browser.close();
     }

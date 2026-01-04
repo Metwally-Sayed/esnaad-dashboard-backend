@@ -4,7 +4,7 @@ import { DocumentFiltersDto } from '../dto/document.dto';
 export class DocumentRepository {
   constructor(private prisma: PrismaClient) {}
 
-  async create(data: Prisma.DocumentCreateInput) {
+  async create(data: any) {
     return this.prisma.document.create({
       data,
       include: {
