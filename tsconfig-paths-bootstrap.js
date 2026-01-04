@@ -1,8 +1,9 @@
 // This file registers tsconfig paths for production
+const path = require('path');
 const tsConfig = require('./tsconfig.json');
 const tsConfigPaths = require('tsconfig-paths');
 
-const baseUrl = './dist'; // Base URL for compiled JavaScript
+const baseUrl = path.join(__dirname, 'dist'); // Absolute path to compiled JavaScript
 const paths = {};
 
 // Convert TypeScript paths to JavaScript paths
@@ -12,6 +13,8 @@ if (tsConfig.compilerOptions?.paths) {
     paths[alias] = originalPaths.map(p => p.replace('src', 'dist'));
   });
 }
+
+console.log('Registering tsconfig paths:', { baseUrl, paths });
 
 tsConfigPaths.register({
   baseUrl,
