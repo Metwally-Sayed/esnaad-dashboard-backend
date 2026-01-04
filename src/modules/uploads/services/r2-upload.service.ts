@@ -79,11 +79,12 @@ export class R2UploadService {
     const key = `snagging/${params.userId}/${timestamp}_${uniqueId}.${fileExtension}`;
 
     // Create presigned URL
+    // Note: Don't include ContentLength in presigned URL as it causes signature mismatches
     const command = new PutObjectCommand({
       Bucket: this.bucketName,
       Key: key,
       ContentType: params.mimeType,
-      ContentLength: params.sizeBytes,
+      // ContentLength removed - causes signature issues with presigned URLs
       Metadata: {
         userId: params.userId,
         originalName: params.fileName

@@ -1,4 +1,4 @@
-import { AuditLog, Prisma } from '@prisma/client';
+import { AuditLog, Prisma, PrismaClient } from '@prisma/client';
 import { AuditRepository } from '../repositories/audit.repository';
 import {
   getPaginationParams,
@@ -10,8 +10,30 @@ import {
 export class AuditService {
   private auditRepo: AuditRepository;
 
-  constructor() {
+  constructor(private prisma: PrismaClient) {
     this.auditRepo = new AuditRepository();
+  }
+
+  async create(data: {
+    action: string;
+    entityType: string;
+    entityId: string;
+    actorId: string;
+    unitId?: string;
+    changes?: any;
+    metadata?: any;
+  }): Promise<AuditLog> {
+    return this.prisma.auditLog.create({
+      data: {
+        action: data.action as any,
+        entityType: data.entityType,
+        entityId: data.entityId,
+        actorId: data.actorId,
+        unitId: data.unitId,
+        changes: data.changes || {},
+        metadata: data.metadata || {},
+      },
+    });
   }
 
   async getAuditLogs(query: any): Promise<PaginatedResponse<AuditLog>> {

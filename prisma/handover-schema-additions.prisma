@@ -1,0 +1,191 @@
+// Add these enums to your schema.prisma file
+
+enum HandoverStatus {
+  DRAFT
+  SENT_TO_OWNER
+  OWNER_CONFIRMED
+  CHANGES_REQUESTED
+  ADMIN_CONFIRMED
+  COMPLETED
+  CANCELLED
+}
+
+enum HandoverItemStatus {
+  OK
+  NOT_OK
+  NA
+}
+
+enum DocumentModule {
+  HANDOVER
+  UNIT_PROFILE
+  SNAGGING
+  PROJECT
+}
+
+enum DocumentType {
+  PDF
+  DOCX
+  XLSX
+}
+
+// Add these to AuditAction enum:
+// HANDOVER_CREATED
+// HANDOVER_UPDATED
+// HANDOVER_SENT_TO_OWNER
+// HANDOVER_OWNER_CONFIRMED
+// HANDOVER_CHANGES_REQUESTED
+// HANDOVER_ADMIN_CONFIRMED
+// HANDOVER_COMPLETED
+// HANDOVER_CANCELLED
+// HANDOVER_PDF_GENERATED
+// HANDOVER_MESSAGE_CREATED
+// DOCUMENT_CREATED
+
+// Add these models to your schema.prisma file
+
+// Handover model - represents the unit handover workflow
+model Handover {
+  id                String           @id @default(cuid())
+  unitId            String
+  ownerId           String           // The owner receiving the handover
+  createdByAdminId  String           // Admin who created the handover
+  status            HandoverStatus   @default(DRAFT)
+  version           Int              @default(1)
+
+  // Dates
+  scheduledAt       DateTime?        // Optional scheduled handover date
+  handoverAt        DateTime?        // Actual handover date/time
+  ownerConfirmedAt  DateTime?
+  adminConfirmedAt  DateTime?
+  completedAt       DateTime?
+  cancelledAt       DateTime?
+
+  // Content
+  notes             String?          @db.Text // Public notes visible to owner
+  internalNotes     String?          @db.Text // Admin-only internal notes
+  snapshotJson      Json?            // Frozen snapshot for PDF generation
+
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  // Relations
+  unit              Unit             @relation(fields: [unitId], references: [id])
+  owner             User             @relation("HandoverOwner", fields: [ownerId], references: [id])
+  createdByAdmin    User             @relation("HandoverAdmin", fields: [createdByAdminId], references: [id])
+  items             HandoverItem[]
+  attachments       HandoverAttachment[]
+  messages          HandoverMessage[]
+  documents         Document[]       @relation("HandoverDocuments")
+
+  @@index([unitId, createdAt])
+  @@index([ownerId, createdAt])
+  @@index([status, createdAt])
+  @@index([createdByAdminId])
+  @@map("handovers")
+}
+
+// Handover checklist items
+model HandoverItem {
+  id             String              @id @default(cuid())
+  handoverId     String
+  category       String              // e.g., "Electrical", "Plumbing", "General"
+  label          String              // e.g., "All lights working"
+  expectedValue  String?             // Optional expected value
+  actualValue    String?             // Actual observed value
+  status         HandoverItemStatus  @default(NA)
+  notes          String?             @db.Text
+  sortOrder      Int                 @default(0)
+
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  // Relations
+  handover       Handover            @relation(fields: [handoverId], references: [id], onDelete: Cascade)
+  attachments    HandoverAttachment[] @relation("ItemAttachments")
+
+  @@index([handoverId, sortOrder])
+  @@map("handover_items")
+}
+
+// Handover attachments (photos, documents)
+model HandoverAttachment {
+  id          String        @id @default(cuid())
+  handoverId  String
+  itemId      String?       // Optional link to specific checklist item
+  url         String        // Cloudflare R2 URL
+  key         String        // R2 object key
+  mimeType    String
+  sizeBytes   Int
+  caption     String?
+
+  createdAt   DateTime      @default(now())
+
+  // Relations
+  handover    Handover      @relation(fields: [handoverId], references: [id], onDelete: Cascade)
+  item        HandoverItem? @relation("ItemAttachments", fields: [itemId], references: [id], onDelete: SetNull)
+
+  @@index([handoverId])
+  @@index([itemId])
+  @@map("handover_attachments")
+}
+
+// Handover messages (comment thread)
+model HandoverMessage {
+  id           String    @id @default(cuid())
+  handoverId   String
+  authorUserId String
+  authorRole   Role
+  body         String    @db.Text
+
+  createdAt    DateTime  @default(now())
+  deletedAt    DateTime?
+
+  // Relations
+  handover     Handover  @relation(fields: [handoverId], references: [id], onDelete: Cascade)
+  author       User      @relation("HandoverMessages", fields: [authorUserId], references: [id])
+
+  @@index([handoverId, createdAt])
+  @@index([authorUserId])
+  @@index([deletedAt])
+  @@map("handover_messages")
+}
+
+// Shared Documents module
+model Document {
+  id               String         @id @default(cuid())
+  module           DocumentModule
+  entityId         String         // e.g., handoverId
+  type             DocumentType
+  templateKey      String         // e.g., "handover-agreement-v1"
+  version          Int            @default(1)
+
+  // File details
+  url              String         // Cloudflare R2 URL
+  key              String         // R2 object key
+  sha256Hash       String         // SHA-256 hash of the file
+  sizeBytes        Int
+
+  // Metadata
+  title            String?
+  description      String?
+  metadata         Json?          // Additional metadata
+
+  createdByUserId  String
+  createdAt        DateTime       @default(now())
+
+  // Relations
+  createdBy        User           @relation("DocumentCreator", fields: [createdByUserId], references: [id])
+  handover         Handover?      @relation("HandoverDocuments", fields: [entityId], references: [id], onDelete: Cascade)
+
+  @@index([module, entityId, createdAt])
+  @@index([createdByUserId])
+  @@index([templateKey])
+  @@map("documents")
+}
+
+// Add these relations to the User model:
+// handoversAsOwner     Handover[]       @relation("HandoverOwner")
+// handoversAsAdmin     Handover[]       @relation("HandoverAdmin")
+// handoverMessages     HandoverMessage[] @relation("HandoverMessages")
+// createdDocuments     Document[]        @relation("DocumentCreator")

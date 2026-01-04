@@ -1,0 +1,412 @@
+import { User, HandoverStatus, AuditAction, Role } from '@prisma/client';
+import { HandoverRepository } from '../repositories/handover.repository';
+import { CreateHandoverDto, UpdateHandoverDto, HandoverFiltersDto, MessageFiltersDto } from '../dto/handover.dto';
+import { UnauthorizedError, ForbiddenError, NotFoundError, ValidationError } from '@/common/errors/AppError';
+import { PrismaClient } from '@prisma/client';
+import { DocumentService } from '@/modules/docs/services/document.service';
+import { AuditService } from '@/modules/audit-logs/services/audit.service';
+
+// State transition rules
+const STATE_TRANSITIONS: Record<HandoverStatus, HandoverStatus[]> = {
+  DRAFT: ['SENT_TO_OWNER', 'CANCELLED'],
+  SENT_TO_OWNER: ['OWNER_CONFIRMED', 'CHANGES_REQUESTED', 'CANCELLED'],
+  OWNER_CONFIRMED: ['ADMIN_CONFIRMED', 'CANCELLED'],
+  CHANGES_REQUESTED: ['SENT_TO_OWNER', 'CANCELLED'],
+  ADMIN_CONFIRMED: ['COMPLETED', 'CANCELLED'],
+  COMPLETED: [], // No transitions allowed
+  CANCELLED: [] // No transitions allowed
+};
+
+// Editable states
+const EDITABLE_STATES: HandoverStatus[] = ['DRAFT', 'SENT_TO_OWNER', 'CHANGES_REQUESTED'];
+
+export class HandoverService {
+  private handoverRepo: HandoverRepository;
+  private documentService: DocumentService;
+  private auditService: AuditService;
+
+  constructor(private prisma: PrismaClient) {
+    this.handoverRepo = new HandoverRepository(prisma);
+    this.documentService = new DocumentService(prisma);
+    this.auditService = new AuditService(prisma);
+  }
+
+  // Validate state transition
+  private validateStateTransition(currentStatus: HandoverStatus, newStatus: HandoverStatus): void {
+    const allowedTransitions = STATE_TRANSITIONS[currentStatus] || [];
+    if (!allowedTransitions.includes(newStatus)) {
+      throw new ValidationError(
+        `Invalid state transition from ${currentStatus} to ${newStatus}`
+      );
+    }
+  }
+
+  // Check if user can access handover
+  private async checkAccess(handoverId: string, user: User, action: 'view' | 'edit' | 'action'): Promise<any> {
+    const handover = await this.handoverRepo.findById(handoverId);
+    if (!handover) {
+      throw new NotFoundError('Handover not found');
+    }
+
+    if (user.role === 'ADMIN') {
+      return handover;
+    }
+
+    // Owner can only access their handovers
+    if (handover.ownerId !== user.id) {
+      throw new ForbiddenError('You do not have permission to access this handover');
+    }
+
+    // Owners cannot edit
+    if (action === 'edit') {
+      throw new ForbiddenError('Only administrators can edit handovers');
+    }
+
+    return handover;
+  }
+
+  // Create handover
+  async create(data: CreateHandoverDto, user: User): Promise<any> {
+    if (user.role !== 'ADMIN') {
+      throw new ForbiddenError('Only administrators can create handovers');
+    }
+
+    // Verify unit exists
+    const unit = await this.prisma.unit.findUnique({
+      where: { id: data.unitId }
+    });
+    if (!unit) {
+      throw new NotFoundError('Unit not found');
+    }
+
+    // Verify owner exists
+    const owner = await this.prisma.user.findUnique({
+      where: { id: data.ownerId }
+    });
+    if (!owner) {
+      throw new NotFoundError('Owner not found');
+    }
+
+    // Check for existing active handovers for this unit
+    const existingHandover = await this.prisma.handover.findFirst({
+      where: {
+        unitId: data.unitId,
+        status: {
+          notIn: ['COMPLETED', 'CANCELLED']
+        }
+      }
+    });
+
+    if (existingHandover) {
+      throw new ValidationError('An active handover already exists for this unit');
+    }
+
+    const handover = await this.handoverRepo.create({
+      unit: { connect: { id: data.unitId } },
+      owner: { connect: { id: data.ownerId } },
+      createdByAdmin: { connect: { id: user.id } },
+      scheduledAt: data.scheduledAt ? new Date(data.scheduledAt) : undefined,
+      handoverAt: data.handoverAt ? new Date(data.handoverAt) : undefined,
+      notes: data.notes,
+      items: data.items ? {
+        create: data.items.map((item, index) => ({
+          ...item,
+          sortOrder: item.sortOrder ?? index
+        }))
+      } : undefined,
+      attachments: data.attachments ? {
+        create: data.attachments
+      } : undefined
+    });
+
+    // Create audit log
+    await this.auditService.create({
+      action: 'HANDOVER_CREATED' as AuditAction,
+      entityType: 'handover',
+      entityId: handover.id,
+      actorId: user.id,
+      unitId: data.unitId,
+      changes: { created: handover }
+    });
+
+    return handover;
+  }
+
+  // List handovers
+  async list(filters: HandoverFiltersDto, user: User): Promise<any> {
+    return this.handoverRepo.findMany(filters, user);
+  }
+
+  // Get handover details
+  async getById(id: string, user: User): Promise<any> {
+    return this.checkAccess(id, user, 'view');
+  }
+
+  // Update handover
+  async update(id: string, data: UpdateHandoverDto, user: User): Promise<any> {
+    if (user.role !== 'ADMIN') {
+      throw new ForbiddenError('Only administrators can update handovers');
+    }
+
+    const handover = await this.checkAccess(id, user, 'edit');
+
+    if (!EDITABLE_STATES.includes(handover.status)) {
+      throw new ValidationError(`Cannot edit handover in ${handover.status} status`);
+    }
+
+    const updateData: any = {
+      scheduledAt: data.scheduledAt !== undefined ? (data.scheduledAt ? new Date(data.scheduledAt) : null) : undefined,
+      handoverAt: data.handoverAt !== undefined ? (data.handoverAt ? new Date(data.handoverAt) : null) : undefined,
+      notes: data.notes,
+      internalNotes: data.internalNotes
+    };
+
+    // Handle items update
+    if (data.items !== undefined) {
+      const existingItemIds = data.items.filter(item => (item as any).id).map(item => (item as any).id);
+      await this.handoverRepo.deleteRemovedItems(id, existingItemIds);
+      await this.handoverRepo.upsertItems(id, data.items);
+    }
+
+    // Handle attachments
+    if (data.attachments !== undefined) {
+      await this.handoverRepo.createAttachments(id, data.attachments);
+    }
+
+    const updated = await this.handoverRepo.update(id, updateData);
+
+    await this.auditService.create({
+      action: 'HANDOVER_UPDATED' as AuditAction,
+      entityType: 'handover',
+      entityId: id,
+      actorId: user.id,
+      unitId: handover.unitId,
+      changes: { before: handover, after: updated }
+    });
+
+    return updated;
+  }
+
+  // Send to owner
+  async sendToOwner(id: string, message: string | undefined, user: User): Promise<any> {
+    if (user.role !== 'ADMIN') {
+      throw new ForbiddenError('Only administrators can send handovers to owners');
+    }
+
+    const handover = await this.checkAccess(id, user, 'action');
+    this.validateStateTransition(handover.status, 'SENT_TO_OWNER');
+
+    const updated = await this.handoverRepo.updateStatus(id, 'SENT_TO_OWNER');
+
+    // Add message if provided
+    if (message) {
+      await this.handoverRepo.createMessage({
+        handover: { connect: { id } },
+        author: { connect: { id: user.id } },
+        authorRole: user.role,
+        body: message
+      });
+    }
+
+    await this.auditService.create({
+      action: 'HANDOVER_SENT_TO_OWNER' as AuditAction,
+      entityType: 'handover',
+      entityId: id,
+      actorId: user.id,
+      unitId: handover.unitId,
+      metadata: { message }
+    });
+
+    return updated;
+  }
+
+  // Owner confirm
+  async ownerConfirm(id: string, acknowledgement: string | undefined, user: User): Promise<any> {
+    const handover = await this.checkAccess(id, user, 'action');
+
+    if (handover.ownerId !== user.id) {
+      throw new ForbiddenError('Only the assigned owner can confirm this handover');
+    }
+
+    this.validateStateTransition(handover.status, 'OWNER_CONFIRMED');
+
+    const updated = await this.handoverRepo.updateStatus(id, 'OWNER_CONFIRMED');
+
+    if (acknowledgement) {
+      await this.handoverRepo.createMessage({
+        handover: { connect: { id } },
+        author: { connect: { id: user.id } },
+        authorRole: user.role,
+        body: acknowledgement
+      });
+    }
+
+    await this.auditService.create({
+      action: 'HANDOVER_OWNER_CONFIRMED' as AuditAction,
+      entityType: 'handover',
+      entityId: id,
+      actorId: user.id,
+      unitId: handover.unitId,
+      metadata: { acknowledgement }
+    });
+
+    return updated;
+  }
+
+  // Owner request changes
+  async requestChanges(id: string, message: string, user: User): Promise<any> {
+    const handover = await this.checkAccess(id, user, 'action');
+
+    if (handover.ownerId !== user.id) {
+      throw new ForbiddenError('Only the assigned owner can request changes');
+    }
+
+    this.validateStateTransition(handover.status, 'CHANGES_REQUESTED');
+
+    const updated = await this.handoverRepo.updateStatus(id, 'CHANGES_REQUESTED');
+
+    await this.handoverRepo.createMessage({
+      handover: { connect: { id } },
+      author: { connect: { id: user.id } },
+      authorRole: user.role,
+      body: message
+    });
+
+    await this.auditService.create({
+      action: 'HANDOVER_CHANGES_REQUESTED' as AuditAction,
+      entityType: 'handover',
+      entityId: id,
+      actorId: user.id,
+      unitId: handover.unitId,
+      metadata: { message }
+    });
+
+    return updated;
+  }
+
+  // Admin confirm
+  async adminConfirm(id: string, finalNotes: string | undefined, user: User): Promise<any> {
+    if (user.role !== 'ADMIN') {
+      throw new ForbiddenError('Only administrators can perform final confirmation');
+    }
+
+    const handover = await this.checkAccess(id, user, 'action');
+    this.validateStateTransition(handover.status, 'ADMIN_CONFIRMED');
+
+    const updateData: any = {};
+    if (finalNotes) {
+      updateData.internalNotes = handover.internalNotes
+        ? `${handover.internalNotes}\n\nFinal Notes: ${finalNotes}`
+        : `Final Notes: ${finalNotes}`;
+    }
+
+    const updated = await this.handoverRepo.updateStatus(id, 'ADMIN_CONFIRMED', updateData);
+
+    await this.auditService.create({
+      action: 'HANDOVER_ADMIN_CONFIRMED' as AuditAction,
+      entityType: 'handover',
+      entityId: id,
+      actorId: user.id,
+      unitId: handover.unitId,
+      metadata: { finalNotes }
+    });
+
+    return updated;
+  }
+
+  // Complete handover with PDF generation
+  async complete(id: string, user: User): Promise<any> {
+    if (user.role !== 'ADMIN') {
+      throw new ForbiddenError('Only administrators can complete handovers');
+    }
+
+    const handover = await this.checkAccess(id, user, 'action');
+    this.validateStateTransition(handover.status, 'COMPLETED');
+
+    // Create snapshot for PDF
+    const snapshot = await this.handoverRepo.createSnapshot(id);
+
+    // Generate PDF
+    const document = await this.documentService.generateHandoverAgreement(id, snapshot, user);
+
+    // Update status to completed
+    const updated = await this.handoverRepo.updateStatus(id, 'COMPLETED');
+
+    await this.auditService.create({
+      action: 'HANDOVER_COMPLETED' as AuditAction,
+      entityType: 'handover',
+      entityId: id,
+      actorId: user.id,
+      unitId: handover.unitId,
+      metadata: { documentId: document.id }
+    });
+
+    return {
+      ...updated,
+      document
+    };
+  }
+
+  // Cancel handover
+  async cancel(id: string, reason: string, user: User): Promise<any> {
+    if (user.role !== 'ADMIN') {
+      throw new ForbiddenError('Only administrators can cancel handovers');
+    }
+
+    const handover = await this.checkAccess(id, user, 'action');
+
+    if (handover.status === 'COMPLETED' || handover.status === 'CANCELLED') {
+      throw new ValidationError(`Cannot cancel handover in ${handover.status} status`);
+    }
+
+    const updated = await this.handoverRepo.updateStatus(id, 'CANCELLED');
+
+    await this.handoverRepo.createMessage({
+      handover: { connect: { id } },
+      author: { connect: { id: user.id } },
+      authorRole: user.role,
+      body: `Handover cancelled: ${reason}`
+    });
+
+    await this.auditService.create({
+      action: 'HANDOVER_CANCELLED' as AuditAction,
+      entityType: 'handover',
+      entityId: id,
+      actorId: user.id,
+      unitId: handover.unitId,
+      metadata: { reason }
+    });
+
+    return updated;
+  }
+
+  // Get messages
+  async getMessages(id: string, filters: MessageFiltersDto, user: User): Promise<any> {
+    await this.checkAccess(id, user, 'view');
+    return this.handoverRepo.getMessages(id, filters);
+  }
+
+  // Add message
+  async addMessage(id: string, body: string, user: User): Promise<any> {
+    const handover = await this.checkAccess(id, user, 'view');
+
+    // Allow messages even after completion for post-handover notes
+    const message = await this.handoverRepo.createMessage({
+      handover: { connect: { id } },
+      author: { connect: { id: user.id } },
+      authorRole: user.role,
+      body
+    });
+
+    await this.auditService.create({
+      action: 'HANDOVER_MESSAGE_CREATED' as AuditAction,
+      entityType: 'handover_message',
+      entityId: message.id,
+      actorId: user.id,
+      unitId: handover.unitId,
+      metadata: { handoverId: id }
+    });
+
+    return message;
+  }
+}

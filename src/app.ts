@@ -12,10 +12,13 @@ import usersRoutes from './modules/users/routes/users.routes';
 import unitsRoutes from './modules/units/routes/units.routes';
 import projectsRoutes from './modules/projects/routes/projects.routes';
 import exportsRoutes from './modules/exports/routes/exports.routes';
-import auditRoutes from './modules/audit-logs/routes/audit.routes';
+import { createAuditRoutes } from './modules/audit-logs/routes/audit.routes';
 import snaggingRoutes from './modules/snagging/routes/snagging.routes';
 import uploadRoutes from './modules/uploads/routes/upload.routes';
 import unitSnaggingRoutes from './modules/units/routes/unit-snagging.routes';
+import { createHandoverRoutes } from './modules/handover/routes/handover.routes';
+import { createDocumentRoutes } from './modules/docs/routes/document.routes';
+import { prisma } from './config/database';
 
 export const createApp = (): Application => {
   const app = express();
@@ -74,9 +77,11 @@ export const createApp = (): Application => {
   app.use('/api/units/:unitId/snaggings', unitSnaggingRoutes);
   app.use('/api/projects', projectsRoutes);
   app.use('/api/exports', exportsRoutes);
-  app.use('/api/audit-logs', auditRoutes);
+  app.use('/api/audit-logs', createAuditRoutes(prisma));
   app.use('/api/snaggings', snaggingRoutes);
   app.use('/api/uploads', uploadRoutes);
+  app.use('/api/handovers', createHandoverRoutes(prisma));
+  app.use('/api/docs', createDocumentRoutes(prisma));
 
   // 404 handler
   app.use(notFoundHandler);

@@ -1,12 +1,13 @@
 import { Request, Response, NextFunction } from 'express';
+import { PrismaClient } from '@prisma/client';
 import { AuditService } from '../services/audit.service';
 import { successResponse } from '../../../common/utils/response';
 
 export class AuditController {
   private auditService: AuditService;
 
-  constructor() {
-    this.auditService = new AuditService();
+  constructor(private prisma: PrismaClient) {
+    this.auditService = new AuditService(prisma);
   }
 
   getAuditLogs = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
