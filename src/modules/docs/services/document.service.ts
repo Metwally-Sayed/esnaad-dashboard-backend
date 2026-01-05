@@ -166,4 +166,45 @@ export class DocumentService {
   async list(filters: any): Promise<any> {
     return this.documentRepo.findMany(filters);
   }
+
+  // Get documents for a specific unit (all handovers for that unit)
+  async getByUnitId(unitId: string): Promise<any> {
+    // Find all handovers for this unit
+    const handovers = await this.prisma.handover.findMany({
+      where: { unitId },
+      select: { id: true }
+    });
+
+    if (handovers.length === 0) {
+      return [];
+    }
+
+    const handoverIds = handovers.map(h => h.id);
+
+    // Get all documents for these handovers
+    return this.prisma.document.findMany({
+      where: {
+        module: 'HANDOVER',
+        entityId: { in: handoverIds }
+      },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        createdBy: {
+          select: {
+            id: true,
+            name: true,
+            email: true
+          }
+        },
+        handover: {
+          select: {
+            id: true,
+            status: true,
+            handoverAt: true,
+            completedAt: true
+          }
+        }
+      }
+    });
+  }
 }

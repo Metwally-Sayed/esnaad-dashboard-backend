@@ -57,4 +57,19 @@ export class DocumentController {
       next(error);
     }
   };
+
+  // Get documents by unit ID
+  getByUnitId = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      const unitId = z.string().cuid().parse(req.params.unitId);
+      const documents = await this.documentService.getByUnitId(unitId);
+
+      res.json({
+        success: true,
+        data: documents
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
 }

@@ -18,6 +18,8 @@ import uploadRoutes from './modules/uploads/routes/upload.routes';
 import unitSnaggingRoutes from './modules/units/routes/unit-snagging.routes';
 import { createHandoverRoutes } from './modules/handover/routes/handover.routes';
 import { createDocumentRoutes } from './modules/docs/routes/document.routes';
+import unitDocumentsRoutes from './modules/unit-documents/routes/unit-documents.routes';
+import unitNestedDocumentsRoutes from './modules/unit-documents/routes/unit-nested-documents.routes';
 import { prisma } from './config/database';
 
 export const createApp = (): Application => {
@@ -75,6 +77,7 @@ export const createApp = (): Application => {
   app.use('/api/users', usersRoutes);
   app.use('/api/units', unitsRoutes);
   app.use('/api/units/:unitId/snaggings', unitSnaggingRoutes);
+  app.use('/api/units/:unitId/documents', unitNestedDocumentsRoutes);
   app.use('/api/projects', projectsRoutes);
   app.use('/api/exports', exportsRoutes);
   app.use('/api/audit-logs', createAuditRoutes(prisma));
@@ -82,6 +85,7 @@ export const createApp = (): Application => {
   app.use('/api/uploads', uploadRoutes);
   app.use('/api/handovers', createHandoverRoutes(prisma));
   app.use('/api/docs', createDocumentRoutes(prisma));
+  app.use('/api/documents', unitDocumentsRoutes);
 
   // 404 handler
   app.use(notFoundHandler);

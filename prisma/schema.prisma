@@ -49,6 +49,14 @@ enum AuditAction {
   HANDOVER_PDF_GENERATED
   HANDOVER_MESSAGE_CREATED
   DOCUMENT_CREATED
+  UNIT_DOCUMENT_UPLOADED
+  UNIT_DOCUMENT_DELETED
+}
+
+enum DocumentCategory {
+  CONTRACT
+  BILL
+  OTHER
 }
 
 enum SnaggingStatus {
@@ -119,6 +127,7 @@ model User {
   handoversAsAdmin  Handover[]        @relation("HandoverAdmin")
   handoverMessages  HandoverMessage[] @relation("HandoverMessages")
   createdDocuments  Document[]        @relation("DocumentCreator")
+  uploadedUnitDocuments UnitDocument[] @relation("UnitDocumentUploader")
 
   @@index([email])
   @@index([role])
@@ -176,6 +185,7 @@ model Unit {
   auditLogs    AuditLog[]
   snaggings    Snagging[]
   handovers    Handover[]
+  documents    UnitDocument[]
 
   @@index([unitNumber])
   @@index([ownerId])
@@ -455,4 +465,28 @@ model Document {
   @@index([createdByUserId])
   @@index([templateKey])
   @@map("documents")
+}
+
+// Unit Documents model - for contracts, bills, and other PDF documents
+model UnitDocument {
+  id               String           @id @default(cuid())
+  unitId           String
+  title            String
+  category         DocumentCategory
+  fileKey          String           // R2 object key
+  mimeType         String           // Must be application/pdf
+  sizeBytes        Int
+  uploadedByUserId String
+
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  // Relations
+  unit             Unit             @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  uploadedBy       User             @relation("UnitDocumentUploader", fields: [uploadedByUserId], references: [id])
+
+  @@index([unitId, createdAt])
+  @@index([category])
+  @@index([uploadedByUserId])
+  @@map("unit_documents")
 }

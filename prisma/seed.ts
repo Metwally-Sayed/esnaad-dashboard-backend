@@ -184,6 +184,104 @@ async function main() {
   }
 
   console.log('✅ Seeded units');
+
+  // Fetch the created units for handover associations
+  const unitA101 = await prisma.unit.findUnique({ where: { unitNumber: 'A-101' } });
+  const unitB201 = await prisma.unit.findUnique({ where: { unitNumber: 'B-201' } });
+
+  // Seed handovers
+  if (unitA101 && owner1) {
+    const handover1 = await prisma.handover.upsert({
+      where: { id: 'handover-a101-seed' },
+      update: {},
+      create: {
+        id: 'handover-a101-seed',
+        unitId: unitA101.id,
+        ownerId: owner1.id,
+        createdByAdminId: adminUser.id,
+        status: 'DRAFT',
+        scheduledAt: new Date('2024-12-20'),
+        notes: 'Initial handover for Marina Tower unit A-101',
+        internalNotes: 'Owner requested early handover. Ensure all finishes are complete.',
+      },
+    });
+
+    // Seed handover items for this handover
+    const handoverItems = [
+      { category: 'Electrical', label: 'All lights working', status: 'OK', sortOrder: 1 },
+      { category: 'Electrical', label: 'Power outlets functional', status: 'OK', sortOrder: 2 },
+      { category: 'Electrical', label: 'Circuit breakers labeled', status: 'NOT_OK', notes: 'Labels missing on kitchen breakers', sortOrder: 3 },
+      { category: 'Plumbing', label: 'Hot water working', status: 'OK', sortOrder: 4 },
+      { category: 'Plumbing', label: 'No leaks in bathroom', status: 'OK', sortOrder: 5 },
+      { category: 'Plumbing', label: 'Kitchen sink drainage', status: 'OK', sortOrder: 6 },
+      { category: 'Doors & Windows', label: 'All doors close properly', status: 'OK', sortOrder: 7 },
+      { category: 'Doors & Windows', label: 'Windows lock securely', status: 'NOT_OK', notes: 'Bedroom window lock stiff', sortOrder: 8 },
+      { category: 'Doors & Windows', label: 'Balcony door seals', status: 'OK', sortOrder: 9 },
+      { category: 'Finishes', label: 'Walls painted properly', status: 'OK', sortOrder: 10 },
+      { category: 'Finishes', label: 'Floor tiles intact', status: 'OK', sortOrder: 11 },
+      { category: 'Finishes', label: 'Kitchen countertop condition', status: 'NA', notes: 'Owner will install custom countertop', sortOrder: 12 },
+      { category: 'HVAC', label: 'Air conditioning working', status: 'OK', sortOrder: 13 },
+      { category: 'HVAC', label: 'Thermostat functional', status: 'OK', sortOrder: 14 },
+      { category: 'General', label: 'Keys provided', status: 'OK', sortOrder: 15 },
+      { category: 'General', label: 'Unit cleaned', status: 'OK', sortOrder: 16 },
+    ];
+
+    for (const item of handoverItems) {
+      await prisma.handoverItem.create({
+        data: {
+          handoverId: handover1.id,
+          ...item,
+        },
+      });
+    }
+
+    console.log('✅ Seeded handover and items for unit A-101');
+  }
+
+  if (unitB201 && owner2) {
+    const handover2 = await prisma.handover.upsert({
+      where: { id: 'handover-b201-seed' },
+      update: {},
+      create: {
+        id: 'handover-b201-seed',
+        unitId: unitB201.id,
+        ownerId: owner2.id,
+        createdByAdminId: adminUser.id,
+        status: 'SENT_TO_OWNER',
+        scheduledAt: new Date('2024-12-15'),
+        handoverAt: new Date('2024-12-15T10:00:00Z'),
+        notes: 'Handover scheduled for Green Valley villa B-201',
+      },
+    });
+
+    // Seed handover items for villa
+    const villaHandoverItems = [
+      { category: 'Electrical', label: 'Main electrical panel inspected', status: 'OK', sortOrder: 1 },
+      { category: 'Electrical', label: 'Outdoor lighting functional', status: 'OK', sortOrder: 2 },
+      { category: 'Plumbing', label: 'Water pressure adequate', status: 'OK', sortOrder: 3 },
+      { category: 'Plumbing', label: 'Pool filtration system operational', status: 'NOT_OK', notes: 'Filter needs replacement', sortOrder: 4 },
+      { category: 'Exterior', label: 'Garden landscaping complete', status: 'OK', sortOrder: 5 },
+      { category: 'Exterior', label: 'Fence secure', status: 'OK', sortOrder: 6 },
+      { category: 'Exterior', label: 'Garage door opener working', status: 'OK', sortOrder: 7 },
+      { category: 'Interior', label: 'Staircase railings secure', status: 'OK', sortOrder: 8 },
+      { category: 'Interior', label: 'Built-in wardrobes complete', status: 'OK', sortOrder: 9 },
+      { category: 'HVAC', label: 'Central AC zones functional', status: 'OK', sortOrder: 10 },
+      { category: 'General', label: 'All keys and access cards provided', status: 'OK', sortOrder: 11 },
+      { category: 'General', label: 'Warranty documents provided', status: 'NA', notes: 'Pending from contractor', sortOrder: 12 },
+    ];
+
+    for (const item of villaHandoverItems) {
+      await prisma.handoverItem.create({
+        data: {
+          handoverId: handover2.id,
+          ...item,
+        },
+      });
+    }
+
+    console.log('✅ Seeded handover and items for unit B-201');
+  }
+
   console.log('\n📝 Seeded users:');
   console.log('   Admin: admin@example.com / Admin123!');
   console.log('   Owner 1: owner1@example.com / Owner123! (owns unit A-101)');

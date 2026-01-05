@@ -11,7 +11,8 @@ import {
   OwnerConfirmSchema,
   RequestChangesSchema,
   AdminConfirmSchema,
-  CancelHandoverSchema
+  CancelHandoverSchema,
+  UpdateItemsSchema
 } from '../dto/handover.dto';
 import { AuthenticatedRequest } from '@/common/types/auth.types';
 
@@ -100,8 +101,8 @@ export class HandoverController {
   // Owner confirm
   ownerConfirm = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
-      const { acknowledgement } = OwnerConfirmSchema.parse(req.body);
-      const handover = await this.handoverService.ownerConfirm(req.params.id, acknowledgement, req.user!);
+      const data = OwnerConfirmSchema.parse(req.body);
+      const handover = await this.handoverService.ownerConfirm(req.params.id, data, req.user!);
 
       res.json({
         success: true,
@@ -200,6 +201,22 @@ export class HandoverController {
       res.json({
         success: true,
         data: message
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  // Update items
+  updateItems = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      const { items } = UpdateItemsSchema.parse(req.body);
+      const handover = await this.handoverService.updateItems(req.params.id, items, req.user!);
+
+      res.json({
+        success: true,
+        data: handover,
+        message: 'Handover items updated successfully'
       });
     } catch (error) {
       next(error);

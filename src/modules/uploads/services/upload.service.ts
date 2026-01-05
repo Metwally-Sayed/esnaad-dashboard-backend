@@ -54,7 +54,9 @@ export class UploadService {
     if (R2_CUSTOM_DOMAIN) {
       return `${R2_CUSTOM_DOMAIN}/${key}`;
     }
-    return `${R2_PUBLIC_URL}/${this.bucket}/${key}`;
+    // R2_PUBLIC_URL already includes the bucket in the subdomain
+    // Format: https://pub-xxx.r2.dev/path/to/file.pdf
+    return `${R2_PUBLIC_URL}/${key}`;
   }
 
   // Validate file type

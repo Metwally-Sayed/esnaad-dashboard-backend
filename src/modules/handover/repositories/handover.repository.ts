@@ -271,7 +271,52 @@ export class HandoverRepository {
 
     return this.prisma.handover.update({
       where: { id },
-      data: updateData
+      data: updateData,
+      include: {
+        unit: {
+          select: {
+            id: true,
+            unitNumber: true,
+            buildingName: true,
+            floor: true,
+            area: true,
+            bedrooms: true,
+            bathrooms: true,
+            unitType: true,
+            address: true
+          }
+        },
+        owner: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true
+          }
+        },
+        createdByAdmin: {
+          select: {
+            id: true,
+            name: true,
+            email: true
+          }
+        },
+        items: {
+          orderBy: { sortOrder: 'asc' },
+          include: {
+            attachments: true
+          }
+        },
+        attachments: {
+          where: { itemId: null }
+        },
+        _count: {
+          select: {
+            messages: true,
+            documents: true
+          }
+        }
+      }
     });
   }
 

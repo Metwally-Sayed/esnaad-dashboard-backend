@@ -10,14 +10,17 @@ export function createDocumentRoutes(prisma: PrismaClient): Router {
   // All routes require authentication
   router.use(requireAuth);
 
-  // Get document metadata by ID
-  router.get('/:id', controller.getById);
+  // Get documents by unit ID (must be before /:id to avoid conflicts)
+  router.get('/unit/:unitId', controller.getByUnitId);
+
+  // Get documents for specific module and entity
+  router.get('/module/:module/entity/:entityId', controller.getByModuleAndEntity);
 
   // List documents with filters
   router.get('/', controller.list);
 
-  // Get documents for specific module and entity
-  router.get('/module/:module/entity/:entityId', controller.getByModuleAndEntity);
+  // Get document metadata by ID
+  router.get('/:id', controller.getById);
 
   return router;
 }

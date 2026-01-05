@@ -68,7 +68,13 @@ export const SendToOwnerSchema = z.object({
 });
 
 export const OwnerConfirmSchema = z.object({
-  acknowledgement: z.string().max(1000).optional()
+  acknowledgement: z.string().max(1000).optional(),
+  itemUpdates: z.array(z.object({
+    id: z.string().cuid(),
+    status: HandoverItemStatusSchema,
+    actualValue: z.string().optional(),
+    notes: z.string().optional()
+  })).optional()
 });
 
 export const RequestChangesSchema = z.object({
@@ -81,6 +87,19 @@ export const AdminConfirmSchema = z.object({
 
 export const CancelHandoverSchema = z.object({
   reason: z.string().min(1).max(1000)
+});
+
+export const UpdateItemsSchema = z.object({
+  items: z.array(z.object({
+    id: z.string().cuid().optional(), // Optional for new items
+    category: z.string().min(1).max(50),
+    label: z.string().min(1).max(200),
+    expectedValue: z.string().optional(),
+    actualValue: z.string().optional(),
+    status: HandoverItemStatusSchema.default('NA'),
+    notes: z.string().optional(),
+    sortOrder: z.number().int().min(0).default(0)
+  }))
 });
 
 // Filter schemas

@@ -221,7 +221,11 @@ export class HandoverService {
   }
 
   // Owner confirm
-  async ownerConfirm(id: string, acknowledgement: string | undefined, user: User): Promise<any> {
+  async ownerConfirm(
+    id: string,
+    data: { acknowledgement?: string; itemUpdates?: Array<{id: string; status: any; actualValue?: string; notes?: string}> },
+    user: User
+  ): Promise<any> {
     const handover = await this.checkAccess(id, user, 'action');
 
     if (handover.ownerId !== user.id) {
@@ -230,14 +234,28 @@ export class HandoverService {
 
     this.validateStateTransition(handover.status, 'OWNER_CONFIRMED');
 
+    // Update items if provided
+    if (data.itemUpdates && data.itemUpdates.length > 0) {
+      for (const itemUpdate of data.itemUpdates) {
+        await this.prisma.handoverItem.update({
+          where: { id: itemUpdate.id },
+          data: {
+            status: itemUpdate.status,
+            actualValue: itemUpdate.actualValue,
+            notes: itemUpdate.notes
+          }
+        });
+      }
+    }
+
     const updated = await this.handoverRepo.updateStatus(id, 'OWNER_CONFIRMED');
 
-    if (acknowledgement) {
+    if (data.acknowledgement) {
       await this.handoverRepo.createMessage({
         handover: { connect: { id } },
         author: { connect: { id: user.id } },
         authorRole: user.role,
-        body: acknowledgement
+        body: data.acknowledgement
       });
     }
 
@@ -247,7 +265,7 @@ export class HandoverService {
       entityId: id,
       actorId: user.id,
       unitId: handover.unitId,
-      metadata: { acknowledgement }
+      metadata: { acknowledgement: data.acknowledgement, itemsUpdated: data.itemUpdates?.length || 0 }
     });
 
     return updated;
@@ -408,5 +426,39 @@ export class HandoverService {
     });
 
     return message;
+  }
+
+  // Update handover items
+  async updateItems(id: string, items: any[], user: User): Promise<any> {
+    if (user.role !== 'ADMIN') {
+      throw new ForbiddenError('Only administrators can update handover items');
+    }
+
+    const handover = await this.checkAccess(id, user, 'edit');
+
+    if (!EDITABLE_STATES.includes(handover.status)) {
+      throw new ValidationError(`Cannot edit handover items in ${handover.status} status`);
+    }
+
+    // Get existing item IDs from the request
+    const existingItemIds = items.filter(item => item.id).map(item => item.id);
+
+    // Delete items not in the list
+    await this.handoverRepo.deleteRemovedItems(id, existingItemIds);
+
+    // Upsert items
+    await this.handoverRepo.upsertItems(id, items);
+
+    await this.auditService.create({
+      action: 'HANDOVER_UPDATED' as AuditAction,
+      entityType: 'handover',
+      entityId: id,
+      actorId: user.id,
+      unitId: handover.unitId,
+      changes: { itemsUpdated: items.length }
+    });
+
+    // Return updated handover with items
+    return this.handoverRepo.findById(id);
   }
 }

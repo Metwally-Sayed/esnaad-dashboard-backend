@@ -39,5 +39,8 @@ export function createHandoverRoutes(prisma: PrismaClient): Router {
   router.get('/:id/messages', controller.getMessages);
   router.post('/:id/messages', controller.addMessage);
 
+  // Items management
+  router.post('/:id/items', requireRole(Role.ADMIN), controller.updateItems);
+
   return router;
 }
