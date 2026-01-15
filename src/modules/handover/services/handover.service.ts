@@ -6,19 +6,22 @@ import { PrismaClient } from '@prisma/client';
 import { DocumentService } from '@/modules/docs/services/document.service';
 import { AuditService } from '@/modules/audit-logs/services/audit.service';
 
-// State transition rules
+// State transition rules (SIMPLIFIED FLOW)
 const STATE_TRANSITIONS: Record<HandoverStatus, HandoverStatus[]> = {
   DRAFT: ['SENT_TO_OWNER', 'CANCELLED'],
-  SENT_TO_OWNER: ['OWNER_CONFIRMED', 'CHANGES_REQUESTED', 'CANCELLED'],
+  SENT_TO_OWNER: ['ACCEPTED', 'CANCELLED'], // SIMPLIFIED: Only ACCEPT or CANCEL
+  ACCEPTED: [], // Final state - no transitions
+  CANCELLED: [], // Final state - no transitions
+
+  // OLD FLOW (deprecated but kept for backward compatibility)
   OWNER_CONFIRMED: ['ADMIN_CONFIRMED', 'CANCELLED'],
   CHANGES_REQUESTED: ['SENT_TO_OWNER', 'CANCELLED'],
   ADMIN_CONFIRMED: ['COMPLETED', 'CANCELLED'],
-  COMPLETED: [], // No transitions allowed
-  CANCELLED: [] // No transitions allowed
+  COMPLETED: []
 };
 
 // Editable states
-const EDITABLE_STATES: HandoverStatus[] = ['DRAFT', 'SENT_TO_OWNER', 'CHANGES_REQUESTED'];
+const EDITABLE_STATES: HandoverStatus[] = ['DRAFT'];
 
 export class HandoverService {
   private handoverRepo: HandoverRepository;
@@ -41,28 +44,38 @@ export class HandoverService {
     }
   }
 
-  // Check if user can access handover
+  // Check if user can access handover (ADMIN ONLY for module access)
   private async checkAccess(handoverId: string, user: User, action: 'view' | 'edit' | 'action'): Promise<any> {
     const handover = await this.handoverRepo.findById(handoverId);
     if (!handover) {
       throw new NotFoundError('Handover not found');
     }
 
+    // Access control based on role and action
     if (user.role === 'ADMIN') {
+      // Admins have full access to all handovers
       return handover;
     }
 
-    // Owner can only access their handovers
-    if (handover.ownerId !== user.id) {
-      throw new ForbiddenError('You do not have permission to access this handover');
+    if (user.role === 'OWNER') {
+      // Owners can only VIEW and ACCEPT their own unit's handovers
+      // They cannot EDIT or perform other actions (those are admin-only)
+
+      // Check if this handover belongs to a unit owned by this user
+      if (handover.ownerId !== user.id) {
+        throw new ForbiddenError('You can only access handovers for your own units');
+      }
+
+      // Owners can view and accept (action), but not edit
+      if (action === 'edit') {
+        throw new ForbiddenError('Only administrators can edit handovers');
+      }
+
+      return handover;
     }
 
-    // Owners cannot edit
-    if (action === 'edit') {
-      throw new ForbiddenError('Only administrators can edit handovers');
-    }
-
-    return handover;
+    // Any other role should not have access
+    throw new ForbiddenError('You do not have permission to access this handover');
   }
 
   // Create handover
@@ -87,18 +100,22 @@ export class HandoverService {
       throw new NotFoundError('Owner not found');
     }
 
-    // Check for existing active handovers for this unit
+    // NEW REQUIREMENT: Check for ANY existing handover for this unit (except CANCELLED)
+    // Per requirements: One handover per unit, but allow new if previous was cancelled
     const existingHandover = await this.prisma.handover.findFirst({
       where: {
         unitId: data.unitId,
         status: {
-          notIn: ['COMPLETED', 'CANCELLED']
+          not: 'CANCELLED' // Allow creation if only cancelled handovers exist
         }
       }
     });
 
     if (existingHandover) {
-      throw new ValidationError('An active handover already exists for this unit');
+      const error: any = new ValidationError('A handover already exists for this unit');
+      error.statusCode = 409; // Conflict
+      error.existingHandoverId = existingHandover.id;
+      throw error;
     }
 
     const handover = await this.handoverRepo.create({
@@ -220,7 +237,72 @@ export class HandoverService {
     return updated;
   }
 
-  // Owner confirm
+  // NEW SIMPLIFIED FLOW: Owner Accept
+  async ownerAccept(id: string, user: User): Promise<any> {
+    // Get handover without admin-only check
+    const handover = await this.handoverRepo.findById(id);
+    if (!handover) {
+      throw new NotFoundError('Handover not found');
+    }
+
+    // Verify owner
+    if (handover.ownerId !== user.id) {
+      throw new ForbiddenError('Only the assigned owner can accept this handover');
+    }
+
+    // Validate state
+    this.validateStateTransition(handover.status, 'ACCEPTED');
+
+    // Get admin and owner details for signatures
+    const admin = await this.prisma.user.findUnique({
+      where: { id: handover.createdByAdminId },
+      select: { name: true }
+    });
+
+    const owner = await this.prisma.user.findUnique({
+      where: { id: handover.ownerId },
+      select: { name: true }
+    });
+
+    // Create snapshot for PDF
+    const snapshot = await this.handoverRepo.createSnapshot(id);
+
+    // Generate PDF with both signatures
+    const document = await this.documentService.generateHandoverAgreement(id, snapshot, user);
+
+    // Update handover to ACCEPTED with signatures and PDF
+    const updated = await this.prisma.handover.update({
+      where: { id },
+      data: {
+        status: 'ACCEPTED',
+        ownerAcceptedAt: new Date(),
+        adminSignature: admin?.name || 'Admin',
+        ownerSignature: owner?.name || 'Owner',
+        pdfUrl: document.url,
+        pdfPublicId: document.key
+      }
+    });
+
+    // Create audit log
+    await this.auditService.create({
+      action: 'HANDOVER_ACCEPTED' as AuditAction,
+      entityType: 'handover',
+      entityId: id,
+      actorId: user.id,
+      unitId: handover.unitId,
+      metadata: {
+        pdfUrl: document.url,
+        documentId: document.id
+      }
+    });
+
+    return {
+      ...updated,
+      document
+    };
+  }
+
+  // DEPRECATED: Old owner confirm (kept for backward compatibility)
   async ownerConfirm(
     id: string,
     data: { acknowledgement?: string; itemUpdates?: Array<{id: string; status: any; actualValue?: string; notes?: string}> },
@@ -271,7 +353,7 @@ export class HandoverService {
     return updated;
   }
 
-  // Owner request changes
+  // DEPRECATED: Owner request changes (kept for backward compatibility)
   async requestChanges(id: string, message: string, user: User): Promise<any> {
     const handover = await this.checkAccess(id, user, 'action');
 

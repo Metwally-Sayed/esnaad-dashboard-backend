@@ -214,6 +214,58 @@ export class UnitsService {
     });
   }
 
+  // NEW: Get handover status and PDF for owner
+  async getUnitHandover(
+    unitId: string,
+    requestingUser: { id: string; role: Role }
+  ): Promise<any> {
+    // Verify unit exists
+    const unit = await this.unitsRepo.findById(unitId);
+    if (!unit) {
+      throw new NotFoundError('Unit not found');
+    }
+
+    // Owners can only access their own units
+    if (requestingUser.role === Role.OWNER && unit.ownerId !== requestingUser.id) {
+      throw new ForbiddenError('You can only access handover information for your own units');
+    }
+
+    // Get handover for this unit
+    const handover = await prisma.handover.findFirst({
+      where: {
+        unitId,
+        status: {
+          not: 'CANCELLED' // Exclude cancelled handovers
+        }
+      },
+      select: {
+        id: true,
+        status: true,
+        scheduledAt: true,
+        handoverAt: true,
+        ownerAcceptedAt: true,
+        pdfUrl: true,
+        adminSignature: true,
+        ownerSignature: true,
+        notes: true,
+        createdAt: true,
+        updatedAt: true
+      }
+    });
+
+    if (!handover) {
+      return {
+        exists: false,
+        message: 'No handover found for this unit'
+      };
+    }
+
+    return {
+      exists: true,
+      handover
+    };
+  }
+
   private async createAuditLog(data: {
     action: AuditAction;
     entityType: string;

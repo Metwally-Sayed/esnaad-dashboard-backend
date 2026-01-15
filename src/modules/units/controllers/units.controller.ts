@@ -81,4 +81,15 @@ export class UnitsController {
       next(error);
     }
   };
+
+  // NEW: Get handover status and PDF for owner
+  getUnitHandover = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { id } = req.params;
+      const result = await this.unitsService.getUnitHandover(id, req.user!);
+      res.json(successResponse(result));
+    } catch (error) {
+      next(error);
+    }
+  };
 }

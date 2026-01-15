@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Snagging Inspection Report</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: white;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            padding-bottom: 20px;
+            border-bottom: 3px solid #2563eb;
+        }
+
+        .header h1 {
+            color: #1e40af;
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+
+        .header .subtitle {
+            color: #64748b;
+            font-size: 14px;
+        }
+
+        .section {
+            margin-bottom: 30px;
+        }
+
+        .section-title {
+            background: #f1f5f9;
+            padding: 10px 15px;
+            margin-bottom: 15px;
+            border-left: 4px solid #2563eb;
+            font-size: 18px;
+            font-weight: bold;
+            color: #1e40af;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+
+        .info-item {
+            padding: 10px;
+            background: #fafafa;
+            border-radius: 4px;
+        }
+
+        .info-item.full-width {
+            grid-column: 1 / -1;
+        }
+
+        .info-label {
+            font-weight: bold;
+            color: #64748b;
+            font-size: 12px;
+            text-transform: uppercase;
+            margin-bottom: 5px;
+        }
+
+        .info-value {
+            color: #1e293b;
+            font-size: 14px;
+        }
+
+        .images-section {
+            margin-top: 20px;
+        }
+
+        .image-item {
+            margin-bottom: 30px;
+            page-break-inside: avoid;
+        }
+
+        .image-container {
+            text-align: center;
+            margin-bottom: 10px;
+        }
+
+        .image-container img {
+            max-width: 100%;
+            height: auto;
+            border: 1px solid #e2e8f0;
+            border-radius: 4px;
+        }
+
+        .image-comment {
+            padding: 10px;
+            background: #f8fafc;
+            border-left: 3px solid #2563eb;
+            font-size: 14px;
+            color: #475569;
+            margin-top: 10px;
+        }
+
+        .agreement-text {
+            margin: 30px 0;
+            padding: 20px;
+            background: #fffbeb;
+            border: 1px solid #fbbf24;
+            border-radius: 4px;
+            line-height: 1.8;
+            text-align: justify;
+        }
+
+        .agreement-text h3 {
+            color: #92400e;
+            margin-bottom: 10px;
+        }
+
+        .signature-section {
+            margin-top: 50px;
+            padding-top: 30px;
+            border-top: 2px solid #e2e8f0;
+        }
+
+        .signature-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 40px;
+            margin-top: 30px;
+        }
+
+        .signature-box {
+            text-align: center;
+        }
+
+        .signature-image {
+            max-width: 200px;
+            max-height: 100px;
+            margin-bottom: 10px;
+            border: 1px solid #cbd5e1;
+        }
+
+        .signature-placeholder {
+            border: 2px dashed #cbd5e1;
+            min-height: 100px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #94a3b8;
+            font-size: 14px;
+            margin-bottom: 10px;
+        }
+
+        .signature-label {
+            font-weight: bold;
+            color: #475569;
+            font-size: 14px;
+        }
+
+        .signature-name {
+            color: #1e293b;
+            font-size: 16px;
+            margin-top: 5px;
+        }
+
+        .footer {
+            margin-top: 50px;
+            padding-top: 20px;
+            border-top: 1px solid #e2e8f0;
+            text-align: center;
+            font-size: 12px;
+            color: #94a3b8;
+        }
+
+        @media print {
+            body {
+                font-size: 12pt;
+            }
+
+            .section {
+                page-break-inside: avoid;
+            }
+
+            .image-item {
+                page-break-inside: avoid;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>SNAGGING INSPECTION REPORT</h1>
+            <div class="subtitle">
+                Document ID: {{snagging.id}}<br>
+                Generated: {{formatDateTime generatedAt}}
+            </div>
+        </div>
+
+        <!-- Unit Information -->
+        <div class="section">
+            <div class="section-title">Unit Information</div>
+            <div class="info-grid">
+                <div class="info-item">
+                    <div class="info-label">Unit Number</div>
+                    <div class="info-value">{{unit.unitNumber}}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Building</div>
+                    <div class="info-value">{{unit.buildingName}}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Floor</div>
+                    <div class="info-value">{{#if unit.floor}}{{unit.floor}}{{else}}N/A{{/if}}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Unit Type</div>
+                    <div class="info-value">{{#if unit.unitType}}{{unit.unitType}}{{else}}N/A{{/if}}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Area (sqm)</div>
+                    <div class="info-value">{{#if unit.area}}{{unit.area}}{{else}}N/A{{/if}}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Bedrooms</div>
+                    <div class="info-value">{{#if unit.bedrooms}}{{unit.bedrooms}}{{else}}N/A{{/if}}</div>
+                </div>
+                {{#if unit.address}}
+                <div class="info-item full-width">
+                    <div class="info-label">Address</div>
+                    <div class="info-value">{{unit.address}}</div>
+                </div>
+                {{/if}}
+            </div>
+        </div>
+
+        <!-- Owner Information -->
+        <div class="section">
+            <div class="section-title">Owner Information</div>
+            <div class="info-grid">
+                <div class="info-item">
+                    <div class="info-label">Name</div>
+                    <div class="info-value">{{owner.name}}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Email</div>
+                    <div class="info-value">{{owner.email}}</div>
+                </div>
+                {{#if owner.phone}}
+                <div class="info-item">
+                    <div class="info-label">Phone</div>
+                    <div class="info-value">{{owner.phone}}</div>
+                </div>
+                {{/if}}
+                {{#if owner.nationalId}}
+                <div class="info-item">
+                    <div class="info-label">National ID / Iqama</div>
+                    <div class="info-value">{{owner.nationalId}}</div>
+                </div>
+                {{/if}}
+            </div>
+        </div>
+
+        <!-- Snagging Details -->
+        <div class="section">
+            <div class="section-title">Snagging Details</div>
+            <div class="info-grid">
+                <div class="info-item full-width">
+                    <div class="info-label">Title</div>
+                    <div class="info-value">{{snagging.title}}</div>
+                </div>
+                <div class="info-item full-width">
+                    <div class="info-label">Description</div>
+                    <div class="info-value">{{snagging.description}}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Created Date</div>
+                    <div class="info-value">{{formatDate snagging.createdAt}}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Created By</div>
+                    <div class="info-value">{{admin.name}}</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Images with Comments -->
+        {{#if images}}
+        <div class="section images-section">
+            <div class="section-title">Inspection Images</div>
+            {{#each images}}
+            <div class="image-item">
+                <div class="image-container">
+                    <img src="{{imageUrl}}" alt="Inspection Image {{@index}}" />
+                </div>
+                {{#if comment}}
+                <div class="image-comment">
+                    <strong>Comment:</strong> {{comment}}
+                </div>
+                {{/if}}
+            </div>
+            {{/each}}
+        </div>
+        {{/if}}
+
+        <!-- Agreement Text -->
+        <div class="section">
+            <div class="agreement-text">
+                <h3>Snagging Agreement</h3>
+                <p>
+                    This document serves as an official record of the snagging inspection conducted for the unit described above.
+                    The inspection was performed on {{formatDate snagging.createdAt}} by {{admin.name}}.
+                </p>
+                <p>
+                    All identified issues and observations have been documented with accompanying images and comments.
+                    The owner acknowledges receipt of this report and agrees to review the findings.
+                </p>
+                <p>
+                    By signing below, both parties acknowledge that they have reviewed this snagging report and agree to
+                    the condition and terms as documented. The Owner confirms receipt of this inspection report.
+                </p>
+            </div>
+        </div>
+
+        <!-- Signature Section -->
+        <div class="signature-section">
+            <div class="section-title">Signatures</div>
+
+            <div class="signature-grid">
+                <div class="signature-box">
+                    <div class="signature-label">Administrator Signature</div>
+                    {{#if adminSignatureUrl}}
+                    <img src="{{adminSignatureUrl}}" alt="Admin Signature" class="signature-image" />
+                    {{else}}
+                    <div class="signature-placeholder">Admin Signature</div>
+                    {{/if}}
+                    <div class="signature-name">{{admin.name}}</div>
+                    <div style="font-size: 12px; color: #94a3b8; margin-top: 5px;">
+                        {{admin.email}}
+                    </div>
+                </div>
+                <div class="signature-box">
+                    <div class="signature-label">Owner Signature</div>
+                    {{#if ownerSignatureUrl}}
+                    <img src="{{ownerSignatureUrl}}" alt="Owner Signature" class="signature-image" />
+                    {{else}}
+                    <div class="signature-placeholder">Pending Owner Signature</div>
+                    {{/if}}
+                    <div class="signature-name">{{owner.name}}</div>
+                    {{#if owner.nationalId}}
+                    <div style="font-size: 12px; color: #94a3b8; margin-top: 5px;">
+                        ID: {{owner.nationalId}}
+                    </div>
+                    {{/if}}
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+            <p>This is a legally binding document. Please keep a copy for your records.</p>
+            <p>Generated by {{generatedBy.name}} ({{generatedBy.email}}) on {{formatDateTime generatedAt}}</p>
+        </div>
+    </div>
+</body>
+</html>

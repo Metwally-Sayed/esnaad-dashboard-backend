@@ -35,12 +35,15 @@ enum AuditAction {
   SNAGGING_UPDATED
   SNAGGING_DELETED
   SNAGGING_STATUS_CHANGED
-  SNAGGING_MESSAGE_CREATED
-  SNAGGING_MESSAGE_UPDATED
-  SNAGGING_MESSAGE_DELETED
+  SNAGGING_SENT_TO_OWNER
+  SNAGGING_ACCEPTED
+  SNAGGING_CANCELLED
+  SNAGGING_APPOINTMENT_SET
+  SNAGGING_PDF_GENERATED
   HANDOVER_CREATED
   HANDOVER_UPDATED
   HANDOVER_SENT_TO_OWNER
+  HANDOVER_ACCEPTED
   HANDOVER_OWNER_CONFIRMED
   HANDOVER_CHANGES_REQUESTED
   HANDOVER_ADMIN_CONFIRMED
@@ -51,6 +54,11 @@ enum AuditAction {
   DOCUMENT_CREATED
   UNIT_DOCUMENT_UPLOADED
   UNIT_DOCUMENT_DELETED
+  REQUEST_CREATED
+  REQUEST_APPROVED
+  REQUEST_REJECTED
+  REQUEST_CANCELLED
+  REQUEST_REVOKED
 }
 
 enum DocumentCategory {
@@ -60,22 +68,23 @@ enum DocumentCategory {
 }
 
 enum SnaggingStatus {
-  OPEN
-  IN_PROGRESS
-  RESOLVED
-  CLOSED
+  DRAFT
+  SENT_TO_OWNER
+  ACCEPTED
+  CANCELLED
 }
 
-enum SnaggingPriority {
+enum SnaggingSeverity {
   LOW
   MEDIUM
   HIGH
-  URGENT
+  CRITICAL
 }
 
 enum HandoverStatus {
   DRAFT
   SENT_TO_OWNER
+  ACCEPTED
   OWNER_CONFIRMED
   CHANGES_REQUESTED
   ADMIN_CONFIRMED
@@ -94,6 +103,7 @@ enum DocumentModule {
   UNIT_PROFILE
   SNAGGING
   PROJECT
+  REQUEST
 }
 
 enum DocumentType {
@@ -104,30 +114,33 @@ enum DocumentType {
 
 // Main user model
 model User {
-  id            String    @id @default(cuid())
-  email         String    @unique
+  id            String   @id @default(cuid())
+  email         String   @unique
   password      String
   name          String?
-  phone         String?   // Phone number
-  address       String?   @db.Text // Physical address
-  nationalId    String?   @unique // National ID / Iqama number
-  role          Role      @default(OWNER)
-  emailVerified Boolean   @default(false)
-  isActive      Boolean   @default(true)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  phone         String? // Phone number
+  address       String?  @db.Text // Physical address
+  nationalId    String?  @unique // National ID / Iqama number
+  role          Role     @default(OWNER)
+  emailVerified Boolean  @default(false)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 
   // Relations
-  ownedUnits        Unit[]
-  auditLogs         AuditLog[]
-  otps              Otp[]
-  createdSnaggings  Snagging[]
-  snaggingMessages  SnaggingMessage[]
-  handoversAsOwner  Handover[]        @relation("HandoverOwner")
-  handoversAsAdmin  Handover[]        @relation("HandoverAdmin")
-  handoverMessages  HandoverMessage[] @relation("HandoverMessages")
-  createdDocuments  Document[]        @relation("DocumentCreator")
-  uploadedUnitDocuments UnitDocument[] @relation("UnitDocumentUploader")
+  ownedUnits            Unit[]
+  auditLogs             AuditLog[]
+  otps                  Otp[]
+  createdSnaggings      Snagging[]        @relation("SnaggingCreatedBy")
+  snaggingsAsOwner      Snagging[]        @relation("SnaggingOwner")
+  handoversAsOwner      Handover[]        @relation("HandoverOwner")
+  handoversAsAdmin      Handover[]        @relation("HandoverAdmin")
+  handoverMessages      HandoverMessage[] @relation("HandoverMessages")
+  createdDocuments      Document[]        @relation("DocumentCreator")
+  uploadedUnitDocuments UnitDocument[]    @relation("UnitDocumentUploader")
+  requestsAsOwner       Request[]         @relation("RequestOwner")
+  approvedRequests      Request[]         @relation("RequestApprovedBy")
+  rejectedRequests      Request[]         @relation("RequestRejectedBy")
 
   @@index([email])
   @@index([role])
@@ -146,11 +159,11 @@ model Project {
   status      String    @default("active") // active, completed, on-hold
   imageUrl    String?
 
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relations
-  units       Unit[]
+  units Unit[]
 
   @@index([name])
   @@index([status])
@@ -173,19 +186,20 @@ model Unit {
   amenities    String?
   unitType     String?
 
-  ownerId      String?
-  projectId    String?
+  ownerId   String?
+  projectId String?
 
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relations
-  owner        User?      @relation(fields: [ownerId], references: [id], onDelete: SetNull)
-  project      Project?   @relation(fields: [projectId], references: [id])
-  auditLogs    AuditLog[]
-  snaggings    Snagging[]
-  handovers    Handover[]
-  documents    UnitDocument[]
+  owner     User?          @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+  project   Project?       @relation(fields: [projectId], references: [id])
+  auditLogs AuditLog[]
+  snaggings Snagging[]
+  handovers Handover[]
+  documents UnitDocument[]
+  requests  Request[]
 
   @@index([unitNumber])
   @@index([ownerId])
@@ -195,11 +209,11 @@ model Unit {
 
 // External clients model
 model ExternalClient {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String?
-  company   String?
-  verified  Boolean  @default(true)
+  id       String  @id @default(cuid())
+  email    String  @unique
+  name     String?
+  company  String?
+  verified Boolean @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -222,11 +236,11 @@ model Otp {
   maxResends  Int        @default(3)
   lastResent  DateTime?
 
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relations
-  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, purpose, verified])
   @@index([expiresAt])
@@ -246,11 +260,11 @@ model AuditLog {
   ipAddress  String?
   userAgent  String?
 
-  createdAt  DateTime    @default(now())
+  createdAt DateTime @default(now())
 
   // Relations
-  actor      User        @relation(fields: [actorId], references: [id], onDelete: Cascade)
-  unit       Unit?       @relation(fields: [unitId], references: [id])
+  actor User  @relation(fields: [actorId], references: [id], onDelete: Cascade)
+  unit  Unit? @relation(fields: [unitId], references: [id])
 
   @@index([action])
   @@index([entityType, entityId])
@@ -261,105 +275,112 @@ model AuditLog {
 
 // Snagging model
 model Snagging {
-  id              String           @id @default(cuid())
-  unitId          String
-  createdByUserId String
-  title           String
-  description     String           @db.Text
-  status          SnaggingStatus   @default(OPEN)
-  priority        SnaggingPriority @default(MEDIUM)
-  deletedAt       DateTime?
+  id               String         @id @default(cuid())
+  unitId           String
+  ownerId          String // Owner user ID
+  createdByAdminId String // Admin who created
+  title            String
+  description      String         @db.Text
+  notes            String?        @db.Text // Admin internal notes
+  status           SnaggingStatus @default(DRAFT)
+  scheduledAt      DateTime? // Appointment date/time set by owner
+  scheduledNote    String? // Note about appointment
+  acceptedAt       DateTime? // When owner accepted
+  pdfUrl           String? // Cloudinary secure_url for PDF
+  pdfPublicId      String? // Cloudinary public_id
 
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relations
-  unit            Unit             @relation(fields: [unitId], references: [id], onDelete: Cascade)
-  createdBy       User             @relation(fields: [createdByUserId], references: [id], onDelete: Cascade)
-  messages        SnaggingMessage[]
+  unit           Unit           @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  owner          User           @relation("SnaggingOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  createdByAdmin User           @relation("SnaggingCreatedBy", fields: [createdByAdminId], references: [id], onDelete: Cascade)
+  items          SnaggingItem[]
 
   @@index([unitId, createdAt])
-  @@index([createdByUserId, createdAt])
-  @@index([status, priority])
-  @@index([deletedAt])
+  @@index([ownerId, createdAt])
+  @@index([status])
   @@map("snaggings")
 }
 
-// Snagging message model
-model SnaggingMessage {
-  id           String    @id @default(cuid())
-  snaggingId   String
-  authorUserId String
-  authorRole   Role
-  bodyTitle    String?
-  bodyText     String    @db.Text
-  deletedAt    DateTime?
-
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+// Snagging checklist items
+model SnaggingItem {
+  id         String           @id @default(cuid())
+  snaggingId String
+  category   String // "Electrical", "Plumbing", etc.
+  label      String // Issue description
+  location   String // "Master Bedroom", etc.
+  severity   SnaggingSeverity @default(MEDIUM)
+  notes      String?
+  sortOrder  Int              @default(0)
+  createdAt  DateTime         @default(now())
 
   // Relations
-  snagging     Snagging  @relation(fields: [snaggingId], references: [id], onDelete: Cascade)
-  author       User      @relation(fields: [authorUserId], references: [id], onDelete: Cascade)
-  attachments  SnaggingAttachment[]
+  snagging Snagging            @relation(fields: [snaggingId], references: [id], onDelete: Cascade)
+  images   SnaggingItemImage[]
 
-  @@index([snaggingId, createdAt])
-  @@index([authorUserId])
-  @@index([deletedAt])
-  @@map("snagging_messages")
+  @@index([snaggingId, sortOrder])
+  @@map("snagging_items")
 }
 
-// Snagging attachment model
-model SnaggingAttachment {
-  id        String   @id @default(cuid())
-  messageId String
-  url       String
-  fileName  String
-  mimeType  String
-  sizeBytes Int
-
-  createdAt DateTime @default(now())
+// Snagging item images
+model SnaggingItemImage {
+  id             String   @id @default(cuid())
+  snaggingItemId String
+  imageUrl       String // Cloudinary secure_url
+  publicId       String // Cloudinary public_id
+  caption        String?
+  sortOrder      Int      @default(0)
+  createdAt      DateTime @default(now())
 
   // Relations
-  message   SnaggingMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  snaggingItem SnaggingItem @relation(fields: [snaggingItemId], references: [id], onDelete: Cascade)
 
-  @@index([messageId])
-  @@map("snagging_attachments")
+  @@index([snaggingItemId, sortOrder])
+  @@map("snagging_item_images")
 }
 
 // Handover model - represents the unit handover workflow
 model Handover {
-  id                String           @id @default(cuid())
-  unitId            String
-  ownerId           String           // The owner receiving the handover
-  createdByAdminId  String           // Admin who created the handover
-  status            HandoverStatus   @default(DRAFT)
-  version           Int              @default(1)
+  id               String         @id @default(cuid())
+  unitId           String // ONE active handover per unit (enforced by partial unique index in migration)
+  ownerId          String // The owner receiving the handover
+  createdByAdminId String // Admin who created the handover
+  status           HandoverStatus @default(DRAFT)
+  version          Int            @default(1)
 
   // Dates
-  scheduledAt       DateTime?        // Optional scheduled handover date
-  handoverAt        DateTime?        // Actual handover date/time
-  ownerConfirmedAt  DateTime?
-  adminConfirmedAt  DateTime?
-  completedAt       DateTime?
-  cancelledAt       DateTime?
+  scheduledAt      DateTime? // Optional scheduled handover date
+  handoverAt       DateTime? // Actual handover date/time
+  ownerAcceptedAt  DateTime? // When owner accepted (new simplified flow)
+  ownerConfirmedAt DateTime?
+  adminConfirmedAt DateTime?
+  completedAt      DateTime?
+  cancelledAt      DateTime?
+
+  // PDF and signatures
+  pdfUrl         String? // Final PDF URL (generated on acceptance)
+  pdfPublicId    String? // R2/Cloudinary public ID
+  adminSignature String? // Admin name (from DB)
+  ownerSignature String? // Owner name (from DB)
 
   // Content
-  notes             String?          @db.Text // Public notes visible to owner
-  internalNotes     String?          @db.Text // Admin-only internal notes
-  snapshotJson      Json?            // Frozen snapshot for PDF generation
+  notes         String? @db.Text // Public notes visible to owner
+  internalNotes String? @db.Text // Admin-only internal notes
+  snapshotJson  Json? // Frozen snapshot for PDF generation
 
-  createdAt         DateTime         @default(now())
-  updatedAt         DateTime         @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relations
-  unit              Unit             @relation(fields: [unitId], references: [id])
-  owner             User             @relation("HandoverOwner", fields: [ownerId], references: [id])
-  createdByAdmin    User             @relation("HandoverAdmin", fields: [createdByAdminId], references: [id])
-  items             HandoverItem[]
-  attachments       HandoverAttachment[]
-  messages          HandoverMessage[]
-  documents         Document[]       @relation("HandoverDocuments")
+  unit           Unit                 @relation(fields: [unitId], references: [id])
+  owner          User                 @relation("HandoverOwner", fields: [ownerId], references: [id])
+  createdByAdmin User                 @relation("HandoverAdmin", fields: [createdByAdminId], references: [id])
+  items          HandoverItem[]
+  attachments    HandoverAttachment[]
+  messages       HandoverMessage[]
+  documents      Document[]           @relation("HandoverDocuments")
 
   @@index([unitId, createdAt])
   @@index([ownerId, createdAt])
@@ -370,22 +391,22 @@ model Handover {
 
 // Handover checklist items
 model HandoverItem {
-  id             String              @id @default(cuid())
-  handoverId     String
-  category       String              // e.g., "Electrical", "Plumbing", "General"
-  label          String              // e.g., "All lights working"
-  expectedValue  String?             // Optional expected value
-  actualValue    String?             // Actual observed value
-  status         HandoverItemStatus  @default(NA)
-  notes          String?             @db.Text
-  sortOrder      Int                 @default(0)
+  id            String             @id @default(cuid())
+  handoverId    String
+  category      String // e.g., "Electrical", "Plumbing", "General"
+  label         String // e.g., "All lights working"
+  expectedValue String? // Optional expected value
+  actualValue   String? // Actual observed value
+  status        HandoverItemStatus @default(NA)
+  notes         String?            @db.Text
+  sortOrder     Int                @default(0)
 
-  createdAt      DateTime            @default(now())
-  updatedAt      DateTime            @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relations
-  handover       Handover            @relation(fields: [handoverId], references: [id], onDelete: Cascade)
-  attachments    HandoverAttachment[] @relation("ItemAttachments")
+  handover    Handover             @relation(fields: [handoverId], references: [id], onDelete: Cascade)
+  attachments HandoverAttachment[] @relation("ItemAttachments")
 
   @@index([handoverId, sortOrder])
   @@map("handover_items")
@@ -393,20 +414,20 @@ model HandoverItem {
 
 // Handover attachments (photos, documents)
 model HandoverAttachment {
-  id          String        @id @default(cuid())
-  handoverId  String
-  itemId      String?       // Optional link to specific checklist item
-  url         String        // Cloudflare R2 URL
-  key         String        // R2 object key
-  mimeType    String
-  sizeBytes   Int
-  caption     String?
+  id         String  @id @default(cuid())
+  handoverId String
+  itemId     String? // Optional link to specific checklist item
+  url        String // Cloudflare R2 URL
+  key        String // R2 object key
+  mimeType   String
+  sizeBytes  Int
+  caption    String?
 
-  createdAt   DateTime      @default(now())
+  createdAt DateTime @default(now())
 
   // Relations
-  handover    Handover      @relation(fields: [handoverId], references: [id], onDelete: Cascade)
-  item        HandoverItem? @relation("ItemAttachments", fields: [itemId], references: [id], onDelete: SetNull)
+  handover Handover      @relation(fields: [handoverId], references: [id], onDelete: Cascade)
+  item     HandoverItem? @relation("ItemAttachments", fields: [itemId], references: [id], onDelete: SetNull)
 
   @@index([handoverId])
   @@index([itemId])
@@ -415,18 +436,18 @@ model HandoverAttachment {
 
 // Handover messages (comment thread)
 model HandoverMessage {
-  id           String    @id @default(cuid())
+  id           String @id @default(cuid())
   handoverId   String
   authorUserId String
   authorRole   Role
-  body         String    @db.Text
+  body         String @db.Text
 
-  createdAt    DateTime  @default(now())
-  deletedAt    DateTime?
+  createdAt DateTime  @default(now())
+  deletedAt DateTime?
 
   // Relations
-  handover     Handover  @relation(fields: [handoverId], references: [id], onDelete: Cascade)
-  author       User      @relation("HandoverMessages", fields: [authorUserId], references: [id])
+  handover Handover @relation(fields: [handoverId], references: [id], onDelete: Cascade)
+  author   User     @relation("HandoverMessages", fields: [authorUserId], references: [id])
 
   @@index([handoverId, createdAt])
   @@index([authorUserId])
@@ -436,30 +457,30 @@ model HandoverMessage {
 
 // Shared Documents module
 model Document {
-  id               String         @id @default(cuid())
-  module           DocumentModule
-  entityId         String         // e.g., handoverId
-  type             DocumentType
-  templateKey      String         // e.g., "handover-agreement-v1"
-  version          Int            @default(1)
+  id          String         @id @default(cuid())
+  module      DocumentModule
+  entityId    String // e.g., handoverId
+  type        DocumentType
+  templateKey String // e.g., "handover-agreement-v1"
+  version     Int            @default(1)
 
   // File details
-  url              String         // Cloudflare R2 URL
-  key              String         // R2 object key
-  sha256Hash       String         // SHA-256 hash of the file
-  sizeBytes        Int
+  url        String // Cloudflare R2 URL
+  key        String // R2 object key
+  sha256Hash String // SHA-256 hash of the file
+  sizeBytes  Int
 
   // Metadata
-  title            String?
-  description      String?
-  metadata         Json?          // Additional metadata
+  title       String?
+  description String?
+  metadata    Json? // Additional metadata
 
-  createdByUserId  String
-  createdAt        DateTime       @default(now())
+  createdByUserId String
+  createdAt       DateTime @default(now())
 
   // Relations
-  createdBy        User           @relation("DocumentCreator", fields: [createdByUserId], references: [id])
-  handover         Handover?      @relation("HandoverDocuments", fields: [entityId], references: [id], onDelete: Cascade)
+  createdBy User      @relation("DocumentCreator", fields: [createdByUserId], references: [id])
+  handover  Handover? @relation("HandoverDocuments", fields: [entityId], references: [id], onDelete: Cascade)
 
   @@index([module, entityId, createdAt])
   @@index([createdByUserId])
@@ -473,20 +494,95 @@ model UnitDocument {
   unitId           String
   title            String
   category         DocumentCategory
-  fileKey          String           // R2 object key
-  mimeType         String           // Must be application/pdf
+  fileKey          String // R2 object key
+  mimeType         String // Must be application/pdf
   sizeBytes        Int
   uploadedByUserId String
 
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relations
-  unit             Unit             @relation(fields: [unitId], references: [id], onDelete: Cascade)
-  uploadedBy       User             @relation("UnitDocumentUploader", fields: [uploadedByUserId], references: [id])
+  unit       Unit @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  uploadedBy User @relation("UnitDocumentUploader", fields: [uploadedByUserId], references: [id])
 
   @@index([unitId, createdAt])
   @@index([category])
   @@index([uploadedByUserId])
   @@map("unit_documents")
+}
+
+// Request enums
+enum RequestType {
+  GUEST_VISIT
+  WORK_PERMISSION
+}
+
+enum RequestStatus {
+  SUBMITTED
+  APPROVED
+  REJECTED
+  EXPIRED
+  CANCELLED
+}
+
+enum ExpiresMode {
+  DATE
+  USES
+  UNLIMITED
+}
+
+// Requests / Invitations model
+model Request {
+  id      String        @id @default(cuid())
+  unitId  String
+  ownerId String
+  type    RequestType
+  status  RequestStatus @default(SUBMITTED)
+  purpose String?       @db.Text
+
+  // Visitor/Work info
+  visitorName        String?
+  visitorPhone       String?
+  companyName        String?
+  representativeName String?
+
+  // Schedule
+  startAt DateTime?
+  endAt   DateTime?
+
+  // Expiry configuration (set on approval)
+  expiresMode ExpiresMode?
+  expiresAt   DateTime?
+  maxUses     Int?         @default(0)
+  usesCount   Int          @default(0)
+
+  // Approval/Rejection
+  approvedByAdminId String?
+  approvedAt        DateTime?
+  rejectedByAdminId String?
+  rejectedAt        DateTime?
+  rejectionReason   String?   @db.Text
+
+  // PDF
+  pdfUrl      String?
+  pdfPublicId String?
+
+  // Meta
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  // Relations
+  unit            Unit  @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  owner           User  @relation("RequestOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  approvedByAdmin User? @relation("RequestApprovedBy", fields: [approvedByAdminId], references: [id], onDelete: SetNull)
+  rejectedByAdmin User? @relation("RequestRejectedBy", fields: [rejectedByAdminId], references: [id], onDelete: SetNull)
+
+  @@index([ownerId, createdAt])
+  @@index([unitId, createdAt])
+  @@index([status])
+  @@index([type])
+  @@index([deletedAt])
+  @@map("requests")
 }

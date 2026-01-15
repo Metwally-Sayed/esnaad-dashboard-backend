@@ -24,6 +24,9 @@ router.get('/', validate(getUnitsQuerySchema), unitsController.getUnits);
 // Get unit by ID (admin sees all, owner sees only their units)
 router.get('/:id', validate(getUnitByIdSchema), unitsController.getUnitById);
 
+// NEW: Get handover status and PDF for unit (owner can access their own unit's handover)
+router.get('/:id/handover', validate(getUnitByIdSchema), unitsController.getUnitHandover);
+
 // Admin-only routes
 router.post(
   '/',

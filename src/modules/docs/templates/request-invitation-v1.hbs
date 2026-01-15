@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{#if (eq request.type "GUEST_VISIT")}}Guest Visit Invitation{{else}}Work Permission{{/if}}</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      font-size: 12pt;
+      line-height: 1.6;
+      color: #1a1a1a;
+      background: white;
+    }
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 40px;
+    }
+    .header {
+      text-align: center;
+      margin-bottom: 40px;
+      border-bottom: 3px solid #16a34a;
+      padding-bottom: 20px;
+    }
+    .header h1 {
+      font-size: 28pt;
+      color: #16a34a;
+      margin-bottom: 10px;
+    }
+    .header .subtitle {
+      font-size: 14pt;
+      color: #64748b;
+    }
+    .section {
+      margin-bottom: 30px;
+    }
+    .section-title {
+      font-size: 16pt;
+      font-weight: 600;
+      color: #16a34a;
+      margin-bottom: 15px;
+      padding-bottom: 5px;
+      border-bottom: 2px solid #e2e8f0;
+    }
+    .info-grid {
+      display: table;
+      width: 100%;
+      margin-bottom: 15px;
+    }
+    .info-row {
+      display: table-row;
+    }
+    .info-label {
+      display: table-cell;
+      font-weight: 600;
+      color: #475569;
+      width: 200px;
+      padding: 8px 0;
+    }
+    .info-value {
+      display: table-cell;
+      padding: 8px 0;
+      color: #1a1a1a;
+    }
+    .validity-box {
+      background: #f0fdf4;
+      border: 2px solid #16a34a;
+      border-radius: 8px;
+      padding: 20px;
+      margin: 20px 0;
+      text-align: center;
+    }
+    .validity-box .title {
+      font-size: 14pt;
+      font-weight: 600;
+      color: #16a34a;
+      margin-bottom: 10px;
+    }
+    .validity-box .value {
+      font-size: 18pt;
+      font-weight: 700;
+      color: #15803d;
+    }
+    .footer {
+      margin-top: 50px;
+      padding-top: 20px;
+      border-top: 2px solid #e2e8f0;
+      text-align: center;
+      font-size: 10pt;
+      color: #64748b;
+    }
+    .footer .important {
+      margin-top: 15px;
+      padding: 10px;
+      background: #fef2f2;
+      border: 1px solid #dc2626;
+      border-radius: 4px;
+      color: #dc2626;
+      font-weight: 600;
+    }
+    .document-id {
+      font-size: 9pt;
+      color: #94a3b8;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <h1>{{#if (eq request.type "GUEST_VISIT")}}Guest Visit Invitation{{else}}Work Permission{{/if}}</h1>
+      <div class="subtitle">Esnaad Property Management</div>
+      <div class="document-id">Document ID: {{request.id}}</div>
+    </div>
+
+    <!-- Unit Information -->
+    <div class="section">
+      <div class="section-title">Unit Information</div>
+      <div class="info-grid">
+        <div class="info-row">
+          <div class="info-label">Unit Number:</div>
+          <div class="info-value">{{unit.unitNumber}}</div>
+        </div>
+        {{#if unit.buildingName}}
+        <div class="info-row">
+          <div class="info-label">Building:</div>
+          <div class="info-value">{{unit.buildingName}}</div>
+        </div>
+        {{/if}}
+        {{#if unit.floor}}
+        <div class="info-row">
+          <div class="info-label">Floor:</div>
+          <div class="info-value">{{unit.floor}}</div>
+        </div>
+        {{/if}}
+        {{#if unit.address}}
+        <div class="info-row">
+          <div class="info-label">Address:</div>
+          <div class="info-value">{{unit.address}}</div>
+        </div>
+        {{/if}}
+      </div>
+    </div>
+
+    <!-- Owner Information -->
+    <div class="section">
+      <div class="section-title">Owner Information</div>
+      <div class="info-grid">
+        <div class="info-row">
+          <div class="info-label">Name:</div>
+          <div class="info-value">{{owner.name}}</div>
+        </div>
+        <div class="info-row">
+          <div class="info-label">Email:</div>
+          <div class="info-value">{{owner.email}}</div>
+        </div>
+        {{#if owner.phone}}
+        <div class="info-row">
+          <div class="info-label">Phone:</div>
+          <div class="info-value">{{owner.phone}}</div>
+        </div>
+        {{/if}}
+      </div>
+    </div>
+
+    <!-- Visitor/Company Information -->
+    <div class="section">
+      <div class="section-title">{{#if (eq request.type "GUEST_VISIT")}}Visitor Information{{else}}Company Information{{/if}}</div>
+      <div class="info-grid">
+        {{#if (eq request.type "GUEST_VISIT")}}
+          <div class="info-row">
+            <div class="info-label">Visitor Name:</div>
+            <div class="info-value">{{request.visitorName}}</div>
+          </div>
+          {{#if request.visitorPhone}}
+          <div class="info-row">
+            <div class="info-label">Phone:</div>
+            <div class="info-value">{{request.visitorPhone}}</div>
+          </div>
+          {{/if}}
+        {{else}}
+          <div class="info-row">
+            <div class="info-label">Company Name:</div>
+            <div class="info-value">{{request.companyName}}</div>
+          </div>
+          {{#if request.representativeName}}
+          <div class="info-row">
+            <div class="info-label">Representative:</div>
+            <div class="info-value">{{request.representativeName}}</div>
+          </div>
+          {{/if}}
+        {{/if}}
+        {{#if request.purpose}}
+        <div class="info-row">
+          <div class="info-label">Purpose:</div>
+          <div class="info-value">{{request.purpose}}</div>
+        </div>
+        {{/if}}
+      </div>
+    </div>
+
+    <!-- Scheduled Dates -->
+    {{#if (or request.startAt request.endAt)}}
+    <div class="section">
+      <div class="section-title">Scheduled Period</div>
+      <div class="info-grid">
+        {{#if request.startAt}}
+        <div class="info-row">
+          <div class="info-label">Start Date:</div>
+          <div class="info-value">{{formatDate request.startAt}}</div>
+        </div>
+        {{/if}}
+        {{#if request.endAt}}
+        <div class="info-row">
+          <div class="info-label">End Date:</div>
+          <div class="info-value">{{formatDate request.endAt}}</div>
+        </div>
+        {{/if}}
+      </div>
+    </div>
+    {{/if}}
+
+    <!-- Validity Information -->
+    <div class="validity-box">
+      <div class="title">Validity</div>
+      <div class="value">
+        {{#if (eq request.expiresMode "DATE")}}
+          Valid until: {{formatDate request.expiresAt}}
+        {{else if (eq request.expiresMode "USES")}}
+          Valid for {{request.maxUses}} uses
+        {{else}}
+          Unlimited Validity
+        {{/if}}
+      </div>
+    </div>
+
+    <!-- Approval Information -->
+    <div class="section">
+      <div class="section-title">Approval Details</div>
+      <div class="info-grid">
+        <div class="info-row">
+          <div class="info-label">Approved By:</div>
+          <div class="info-value">{{admin.name}}</div>
+        </div>
+        <div class="info-row">
+          <div class="info-label">Approval Date:</div>
+          <div class="info-value">{{formatDateTime request.approvedAt}}</div>
+        </div>
+        <div class="info-row">
+          <div class="info-label">Request Date:</div>
+          <div class="info-value">{{formatDateTime request.createdAt}}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+      <div>Generated on {{formatDateTime generatedAt}}</div>
+      <div>This document is electronically generated and does not require a signature</div>
+      <div class="important">
+        Please present this document at the security gate for entry approval
+      </div>
+    </div>
+  </div>
+</body>
+</html>

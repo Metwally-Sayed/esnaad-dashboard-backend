@@ -1,125 +1,100 @@
-import { Prisma, SnaggingStatus, SnaggingPriority } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../../../config/database';
 
 export class SnaggingRepository {
-  // Soft delete filter - exclude deleted records by default
-  private excludeDeleted = { deletedAt: null };
-
   async findAll(params: {
     skip: number;
     take: number;
     where?: Prisma.SnaggingWhereInput;
     orderBy?: Prisma.SnaggingOrderByWithRelationInput;
-    includeDeleted?: boolean;
   }) {
-    const where = params.includeDeleted
-      ? params.where
-      : { ...params.where, ...this.excludeDeleted };
-
     const [data, total] = await Promise.all([
       prisma.snagging.findMany({
         skip: params.skip,
         take: params.take,
-        where,
-        orderBy: params.orderBy,
+        where: params.where,
+        orderBy: params.orderBy || { createdAt: 'desc' },
         include: {
           unit: {
             select: {
               id: true,
               unitNumber: true,
               buildingName: true,
-              ownerId: true
+              floor: true,
+              area: true,
+              bedrooms: true,
+              address: true
             }
           },
-          createdBy: {
+          owner: {
             select: {
               id: true,
               name: true,
               email: true,
-              role: true
+              phone: true,
+              nationalId: true
             }
           },
-          messages: {
-            where: this.excludeDeleted,
-            take: 1,
-            orderBy: { createdAt: 'desc' },
+          createdByAdmin: {
             select: {
               id: true,
-              createdAt: true,
-              author: {
-                select: {
-                  name: true,
-                  role: true
-                }
-              }
+              name: true,
+              email: true
             }
           },
-          _count: {
-            select: {
-              messages: {
-                where: this.excludeDeleted
+          items: {
+            orderBy: { sortOrder: 'asc' },
+            include: {
+              images: {
+                orderBy: { sortOrder: 'asc' }
               }
             }
           }
         }
       }),
-      prisma.snagging.count({ where })
+      prisma.snagging.count({ where: params.where })
     ]);
 
     return { data, total };
   }
 
-  async findById(id: string, includeMessages = false, messageLimit = 10) {
-    return prisma.snagging.findFirst({
-      where: {
-        id,
-        ...this.excludeDeleted
-      },
+  async findById(id: string) {
+    return prisma.snagging.findUnique({
+      where: { id },
       include: {
         unit: {
           select: {
             id: true,
             unitNumber: true,
             buildingName: true,
+            floor: true,
+            area: true,
+            bedrooms: true,
             address: true,
-            ownerId: true,
-            owner: {
-              select: {
-                id: true,
-                name: true,
-                email: true
-              }
-            }
+            ownerId: true
           }
         },
-        createdBy: {
+        owner: {
           select: {
             id: true,
             name: true,
             email: true,
-            role: true
+            phone: true,
+            nationalId: true
           }
         },
-        messages: includeMessages ? {
-          where: this.excludeDeleted,
-          take: messageLimit,
-          orderBy: { createdAt: 'asc' },
-          include: {
-            author: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-                role: true
-              }
-            },
-            attachments: true
-          }
-        } : false,
-        _count: {
+        createdByAdmin: {
           select: {
-            messages: {
-              where: this.excludeDeleted
+            id: true,
+            name: true,
+            email: true
+          }
+        },
+        items: {
+          orderBy: { sortOrder: 'asc' },
+          include: {
+            images: {
+              orderBy: { sortOrder: 'asc' }
             }
           }
         }
@@ -127,62 +102,47 @@ export class SnaggingRepository {
     });
   }
 
-  async findByUnit(unitId: string, params: {
-    skip: number;
-    take: number;
-    status?: SnaggingStatus;
-    priority?: SnaggingPriority;
-    createdByUserId?: string;
-  }) {
-    const where: Prisma.SnaggingWhereInput = {
-      unitId,
-      ...this.excludeDeleted,
-      ...(params.status && { status: params.status }),
-      ...(params.priority && { priority: params.priority }),
-      ...(params.createdByUserId && { createdByUserId: params.createdByUserId })
-    };
-
-    const [data, total] = await Promise.all([
-      prisma.snagging.findMany({
-        skip: params.skip,
-        take: params.take,
-        where,
-        orderBy: { createdAt: 'desc' },
-        include: {
-          createdBy: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-              role: true
-            }
+  // ✅ NEW: Method to load full details with all relations for PDF generation
+  async findByIdWithDetails(id: string) {
+    return prisma.snagging.findUnique({
+      where: { id },
+      include: {
+        unit: true,
+        owner: true,
+        createdByAdmin: true,
+        items: {
+          include: {
+            images: true
           },
-          _count: {
-            select: {
-              messages: {
-                where: this.excludeDeleted
-              }
+          orderBy: { sortOrder: 'asc' }
+        }
+      }
+    });
+  }
+
+  async findByUnitId(unitId: string) {
+    return prisma.snagging.findMany({
+      where: { unitId },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        items: {
+          orderBy: { sortOrder: 'asc' },
+          include: {
+            images: {
+              orderBy: { sortOrder: 'asc' }
             }
           }
         }
-      }),
-      prisma.snagging.count({ where })
-    ]);
-
-    return { data, total };
+      }
+    });
   }
 
-  async findByUser(userId: string, params: {
+  async findByOwner(ownerId: string, params: {
     skip: number;
     take: number;
-    status?: SnaggingStatus;
-    priority?: SnaggingPriority;
   }) {
     const where: Prisma.SnaggingWhereInput = {
-      createdByUserId: userId,
-      ...this.excludeDeleted,
-      ...(params.status && { status: params.status }),
-      ...(params.priority && { priority: params.priority })
+      ownerId
     };
 
     const [data, total] = await Promise.all([
@@ -199,10 +159,13 @@ export class SnaggingRepository {
               buildingName: true
             }
           },
-          _count: {
-            select: {
-              messages: {
-                where: this.excludeDeleted
+          items: {
+            orderBy: { sortOrder: 'asc' },
+            take: 3, // Just first few items for list view
+            include: {
+              images: {
+                orderBy: { sortOrder: 'asc' },
+                take: 1 // Just first image
               }
             }
           }
@@ -214,23 +177,91 @@ export class SnaggingRepository {
     return { data, total };
   }
 
-  async create(data: Prisma.SnaggingCreateInput) {
+  async create(data: {
+    unitId: string;
+    ownerId: string;
+    createdByAdminId: string;
+    title: string;
+    description: string;
+    notes?: string;
+    status?: string;
+    items: Array<{
+      category: string;
+      label: string;
+      location: string;
+      severity: string;
+      notes?: string;
+      sortOrder?: number;
+      images: Array<{
+        imageUrl: string;
+        publicId: string;
+        caption?: string;
+        sortOrder?: number;
+      }>;
+    }>;
+  }) {
     return prisma.snagging.create({
-      data,
+      data: {
+        unitId: data.unitId,
+        ownerId: data.ownerId,
+        createdByAdminId: data.createdByAdminId,
+        title: data.title,
+        description: data.description,
+        notes: data.notes,
+        status: data.status as any || 'DRAFT',
+        items: {
+          create: data.items.map((item, index) => ({
+            category: item.category,
+            label: item.label,
+            location: item.location,
+            severity: item.severity as any,
+            notes: item.notes,
+            sortOrder: item.sortOrder ?? index,
+            images: {
+              create: item.images.map((img, imgIndex) => ({
+                imageUrl: img.imageUrl,
+                publicId: img.publicId,
+                caption: img.caption,
+                sortOrder: img.sortOrder ?? imgIndex
+              }))
+            }
+          }))
+        }
+      },
       include: {
         unit: {
           select: {
             id: true,
             unitNumber: true,
-            buildingName: true
+            buildingName: true,
+            floor: true,
+            area: true,
+            bedrooms: true,
+            address: true
           }
         },
-        createdBy: {
+        owner: {
           select: {
             id: true,
             name: true,
             email: true,
-            role: true
+            phone: true,
+            nationalId: true
+          }
+        },
+        createdByAdmin: {
+          select: {
+            id: true,
+            name: true,
+            email: true
+          }
+        },
+        items: {
+          orderBy: { sortOrder: 'asc' },
+          include: {
+            images: {
+              orderBy: { sortOrder: 'asc' }
+            }
           }
         }
       }
@@ -249,95 +280,41 @@ export class SnaggingRepository {
             buildingName: true
           }
         },
-        createdBy: {
+        owner: {
           select: {
             id: true,
             name: true,
-            email: true,
-            role: true
+            email: true
+          }
+        },
+        createdByAdmin: {
+          select: {
+            id: true,
+            name: true,
+            email: true
+          }
+        },
+        items: {
+          orderBy: { sortOrder: 'asc' },
+          include: {
+            images: {
+              orderBy: { sortOrder: 'asc' }
+            }
           }
         }
       }
     });
   }
 
-  async softDelete(id: string) {
+  async updatePdfUrl(id: string, pdfUrl: string, pdfPublicId: string) {
     return prisma.snagging.update({
       where: { id },
-      data: { deletedAt: new Date() }
+      data: {
+        pdfUrl,
+        pdfPublicId
+      }
     });
   }
 
-  async hardDelete(id: string) {
-    return prisma.snagging.delete({
-      where: { id }
-    });
-  }
-
-  // Search with text query
-  async search(params: {
-    skip: number;
-    take: number;
-    search: string;
-    status?: SnaggingStatus;
-    priority?: SnaggingPriority;
-    unitId?: string;
-    createdByUserId?: string;
-    fromDate?: Date;
-    toDate?: Date;
-  }) {
-    const where: Prisma.SnaggingWhereInput = {
-      ...this.excludeDeleted,
-      AND: [
-        {
-          OR: [
-            { title: { contains: params.search, mode: 'insensitive' } },
-            { description: { contains: params.search, mode: 'insensitive' } }
-          ]
-        },
-        ...(params.status ? [{ status: params.status }] : []),
-        ...(params.priority ? [{ priority: params.priority }] : []),
-        ...(params.unitId ? [{ unitId: params.unitId }] : []),
-        ...(params.createdByUserId ? [{ createdByUserId: params.createdByUserId }] : []),
-        ...(params.fromDate ? [{ createdAt: { gte: params.fromDate } }] : []),
-        ...(params.toDate ? [{ createdAt: { lte: params.toDate } }] : [])
-      ]
-    };
-
-    const [data, total] = await Promise.all([
-      prisma.snagging.findMany({
-        skip: params.skip,
-        take: params.take,
-        where,
-        orderBy: { createdAt: 'desc' },
-        include: {
-          unit: {
-            select: {
-              id: true,
-              unitNumber: true,
-              buildingName: true
-            }
-          },
-          createdBy: {
-            select: {
-              id: true,
-              name: true,
-              email: true,
-              role: true
-            }
-          },
-          _count: {
-            select: {
-              messages: {
-                where: this.excludeDeleted
-              }
-            }
-          }
-        }
-      }),
-      prisma.snagging.count({ where })
-    ]);
-
-    return { data, total };
-  }
+  // ✅ REMOVED: No soft delete (use CANCELLED status instead)
 }

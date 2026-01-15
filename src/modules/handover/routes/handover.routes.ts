@@ -14,32 +14,36 @@ export function createHandoverRoutes(prisma: PrismaClient): Router {
   // Create handover (Admin only)
   router.post('/', requireRole(Role.ADMIN), controller.create);
 
-  // List handovers
-  // Admin: can see all with filters
-  // Owner: can see only their handovers
-  router.get('/', controller.list);
+  // List handovers (Admin only - owners cannot browse all handovers)
+  router.get('/', requireRole(Role.ADMIN), controller.list);
 
-  // Get handover by ID
-  // Admin: can access any
-  // Owner: can access only their handovers
+  // Get handover by ID (Owners can view their own handovers, Admins can view all)
+  // Permission check is done in the service layer (checkAccess method)
   router.get('/:id', controller.getById);
 
-  // Update handover (Admin only, allowed in certain states)
+  // Update handover (Admin only)
   router.patch('/:id', requireRole(Role.ADMIN), controller.update);
 
   // Workflow actions
   router.post('/:id/send', requireRole(Role.ADMIN), controller.sendToOwner);
-  router.post('/:id/owner-confirm', controller.ownerConfirm); // Owner action
-  router.post('/:id/request-changes', controller.requestChanges); // Owner action
+
+  // NEW SIMPLIFIED FLOW: Owner Accept (generates PDF immediately)
+  // This is the ONLY owner-accessible endpoint in handover module
+  router.post('/:id/accept', controller.ownerAccept);
+
+  // DEPRECATED endpoints (kept for backward compatibility)
+  router.post('/:id/owner-confirm', controller.ownerConfirm);
+  router.post('/:id/request-changes', controller.requestChanges);
   router.post('/:id/admin-confirm', requireRole(Role.ADMIN), controller.adminConfirm);
   router.post('/:id/complete', requireRole(Role.ADMIN), controller.complete);
+
   router.post('/:id/cancel', requireRole(Role.ADMIN), controller.cancel);
 
-  // Messages
-  router.get('/:id/messages', controller.getMessages);
-  router.post('/:id/messages', controller.addMessage);
+  // Messages (Admin only)
+  router.get('/:id/messages', requireRole(Role.ADMIN), controller.getMessages);
+  router.post('/:id/messages', requireRole(Role.ADMIN), controller.addMessage);
 
-  // Items management
+  // Items management (Admin only)
   router.post('/:id/items', requireRole(Role.ADMIN), controller.updateItems);
 
   return router;

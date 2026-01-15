@@ -222,4 +222,19 @@ export class HandoverController {
       next(error);
     }
   };
+
+  // NEW: Owner accept (simplified flow)
+  ownerAccept = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      const result = await this.handoverService.ownerAccept(req.params.id, req.user!);
+
+      res.json({
+        success: true,
+        data: result,
+        message: 'Handover accepted successfully. PDF agreement generated.'
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
 }
