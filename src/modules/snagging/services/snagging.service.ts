@@ -87,10 +87,10 @@ export class SnaggingService {
     }
 
     // Handle both formats: convert root-level images to items if needed
-    let items = data.items || [];
+    let rawItems = data.items || [];
 
     // If root-level images provided and no items, create a single item with all images
-    if (data.images && data.images.length > 0 && (!items || items.length === 0)) {
+    if (data.images && data.images.length > 0 && (!rawItems || rawItems.length === 0)) {
       // Generate publicId from imageUrl if not provided
       const processedImages = data.images.map(img => ({
         imageUrl: img.imageUrl,
@@ -98,17 +98,31 @@ export class SnaggingService {
         caption: img.caption
       }));
 
-      items = [
+      rawItems = [
         {
           category: 'General',
           label: data.title,
           location: 'Unit',
-          severity: 'HIGH',
+          severity: 'HIGH' as const,
           notes: data.description,
           images: processedImages
         }
       ];
     }
+
+    // Normalize items to ensure all required fields have values
+    const items = rawItems.map(item => ({
+      category: item.category || 'General',
+      label: item.label || 'Issue',
+      location: item.location || 'Unit',
+      severity: item.severity || 'MEDIUM',
+      notes: item.notes,
+      images: (item.images || []).map(img => ({
+        imageUrl: img.imageUrl,
+        publicId: img.publicId,
+        caption: img.caption
+      }))
+    }));
 
     // Validate items
     if (items.length === 0) {

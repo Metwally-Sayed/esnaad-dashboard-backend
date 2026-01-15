@@ -23,7 +23,7 @@ export class RequestController {
     try {
       const validation = CreateRequestSchema.safeParse(req.body);
       if (!validation.success) {
-        throw new ValidationError(validation.error.errors[0].message);
+        throw new ValidationError(validation.error.issues[0].message);
       }
 
       const request = await this.requestService.create(validation.data, req.user!);
@@ -42,7 +42,7 @@ export class RequestController {
     try {
       const validation = RequestFiltersSchema.safeParse(req.query);
       if (!validation.success) {
-        throw new ValidationError(validation.error.errors[0].message);
+        throw new ValidationError(validation.error.issues[0].message);
       }
 
       const result = await this.requestService.list(validation.data, req.user!);
@@ -76,7 +76,7 @@ export class RequestController {
     try {
       const validation = ApproveRequestSchema.safeParse(req.body);
       if (!validation.success) {
-        throw new ValidationError(validation.error.errors[0].message);
+        throw new ValidationError(validation.error.issues[0].message);
       }
 
       const request = await this.requestService.approve(req.params.id, validation.data, req.user!);
@@ -95,7 +95,7 @@ export class RequestController {
     try {
       const validation = RejectRequestSchema.safeParse(req.body);
       if (!validation.success) {
-        throw new ValidationError(validation.error.errors[0].message);
+        throw new ValidationError(validation.error.issues[0].message);
       }
 
       const request = await this.requestService.reject(req.params.id, validation.data, req.user!);

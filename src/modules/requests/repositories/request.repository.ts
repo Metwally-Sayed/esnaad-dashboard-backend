@@ -1,5 +1,8 @@
-import { PrismaClient, Prisma, User } from '@prisma/client';
+import { PrismaClient, Prisma, Role } from '@prisma/client';
 import { RequestFiltersDto } from '../dto/request.dto';
+
+// Minimal user type for repository operations
+type RepoUser = { id: string; role: Role };
 
 export class RequestRepository {
   constructor(private prisma: PrismaClient) {}
@@ -81,7 +84,7 @@ export class RequestRepository {
   }
 
   // Find many with filters
-  async findMany(filters: RequestFiltersDto, user: User) {
+  async findMany(filters: RequestFiltersDto, user: RepoUser) {
     const where: Prisma.RequestWhereInput = {
       deletedAt: null
     };

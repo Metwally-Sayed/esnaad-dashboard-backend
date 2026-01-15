@@ -1,4 +1,7 @@
 import { User, DocumentModule, DocumentType } from '@prisma/client';
+
+// Minimal user type for document generation
+type DocUser = Pick<User, 'id' | 'name' | 'email'> | { id: string; name?: string | null; email: string };
 import { PrismaClient } from '@prisma/client';
 import { DocumentRepository } from '../repositories/document.repository';
 import { UploadService } from '@/modules/uploads/services/upload.service';
@@ -129,7 +132,7 @@ export class DocumentService {
   }
 
   // Generate handover agreement PDF
-  async generateHandoverAgreement(handoverId: string, snapshot: any, user: User): Promise<any> {
+  async generateHandoverAgreement(handoverId: string, snapshot: any, user: DocUser): Promise<any> {
     this.registerHelpers();
 
     // Load template
@@ -252,7 +255,7 @@ export class DocumentService {
   }
 
   // Generate snagging agreement PDF
-  async generateSnaggingAgreement(snaggingId: string, user: User): Promise<{ pdfUrl: string; pdfPublicId: string }> {
+  async generateSnaggingAgreement(snaggingId: string, user: DocUser): Promise<{ pdfUrl: string; pdfPublicId: string }> {
     this.registerHelpers();
 
     // Load snagging with all relations
@@ -262,8 +265,13 @@ export class DocumentService {
         unit: true,
         owner: true,
         createdByAdmin: true,
-        images: {
-          orderBy: { sortOrder: 'asc' }
+        items: {
+          orderBy: { sortOrder: 'asc' },
+          include: {
+            images: {
+              orderBy: { sortOrder: 'asc' }
+            }
+          }
         }
       }
     });
@@ -280,23 +288,27 @@ export class DocumentService {
     const templateContent = await fs.readFile(templatePath, 'utf-8');
     const template = Handlebars.compile(templateContent);
 
+    // Flatten images from all items
+    const allImages = snagging.items.flatMap(item =>
+      item.images.map(img => ({
+        imageUrl: img.imageUrl,
+        caption: img.caption
+      }))
+    );
+
     // Prepare data for template
     const templateData = {
       snagging: {
         id: snagging.id,
         title: snagging.title,
         description: snagging.description,
-        createdAt: snagging.createdAt,
-        adminSignatureUrl: snagging.adminSignatureUrl,
-        ownerSignatureUrl: snagging.ownerSignatureUrl
+        createdAt: snagging.createdAt
       },
       unit: snagging.unit,
       owner: snagging.owner,
       admin: snagging.createdByAdmin,
-      images: snagging.images.map(img => ({
-        imageUrl: img.imageUrl,
-        comment: img.comment
-      })),
+      items: snagging.items,
+      images: allImages,
       generatedAt: new Date(),
       generatedBy: {
         name: user.name || user.email,
@@ -325,7 +337,7 @@ export class DocumentService {
   }
 
   // Generate request invitation/permit PDF
-  async generateRequestInvitation(request: any, user: User): Promise<{ pdfUrl: string; pdfPublicId: string }> {
+  async generateRequestInvitation(request: any, user: DocUser): Promise<{ pdfUrl: string; pdfPublicId: string }> {
     this.registerHelpers();
 
     // Load template

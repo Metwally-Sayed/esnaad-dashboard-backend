@@ -64,6 +64,96 @@ export class EmailService {
     }
   }
 
+  async sendOTP(email: string, otp: string, name?: string): Promise<void> {
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background: #2563eb; color: white; padding: 20px; text-align: center; }
+          .content { padding: 20px; background: #f8fafc; }
+          .otp-code { font-size: 32px; font-weight: bold; text-align: center; padding: 20px; background: #e5e7eb; border-radius: 8px; letter-spacing: 8px; }
+          .footer { padding: 20px; text-align: center; color: #64748b; font-size: 12px; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>Verify Your Email</h1>
+          </div>
+          <div class="content">
+            <p>Dear ${name || 'User'},</p>
+            <p>Your verification code is:</p>
+            <div class="otp-code">${otp}</div>
+            <p>This code will expire in 10 minutes.</p>
+            <p>If you didn't request this code, please ignore this email.</p>
+          </div>
+          <div class="footer">
+            <p>This is an automated message from Esnaad Dashboard.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    await this.sendEmail({
+      to: email,
+      subject: 'Verify Your Email - Esnaad Dashboard',
+      html,
+    });
+
+    // Also log OTP to console for development
+    console.log(`📧 OTP for ${email}: ${otp}`);
+  }
+
+  async sendPasswordResetOTP(email: string, otp: string, name?: string): Promise<void> {
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background: #dc2626; color: white; padding: 20px; text-align: center; }
+          .content { padding: 20px; background: #f8fafc; }
+          .otp-code { font-size: 32px; font-weight: bold; text-align: center; padding: 20px; background: #e5e7eb; border-radius: 8px; letter-spacing: 8px; }
+          .footer { padding: 20px; text-align: center; color: #64748b; font-size: 12px; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>Password Reset</h1>
+          </div>
+          <div class="content">
+            <p>Dear ${name || 'User'},</p>
+            <p>Your password reset code is:</p>
+            <div class="otp-code">${otp}</div>
+            <p>This code will expire in 10 minutes.</p>
+            <p>If you didn't request a password reset, please ignore this email and your password will remain unchanged.</p>
+          </div>
+          <div class="footer">
+            <p>This is an automated message from Esnaad Dashboard.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    await this.sendEmail({
+      to: email,
+      subject: 'Password Reset - Esnaad Dashboard',
+      html,
+    });
+
+    // Also log OTP to console for development
+    console.log(`📧 Password Reset OTP for ${email}: ${otp}`);
+  }
+
   async sendSnaggingNotification(
     ownerEmail: string,
     ownerName: string,
@@ -117,3 +207,6 @@ export class EmailService {
     });
   }
 }
+
+// Export singleton instance
+export const emailService = new EmailService();

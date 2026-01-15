@@ -1,4 +1,4 @@
-import { User, RequestStatus, AuditAction, ExpiresMode } from '@prisma/client';
+import { User, RequestStatus, AuditAction, ExpiresMode, Role } from '@prisma/client';
 import { RequestRepository } from '../repositories/request.repository';
 import { CreateRequestDto, ApproveRequestDto, RejectRequestDto, RequestFiltersDto } from '../dto/request.dto';
 import { ForbiddenError, NotFoundError, ValidationError } from '@/common/errors/AppError';
@@ -6,6 +6,9 @@ import { PrismaClient } from '@prisma/client';
 import { DocumentService } from '@/modules/docs/services/document.service';
 import { AuditService } from '@/modules/audit-logs/services/audit.service';
 import { EmailService } from '@/common/services/email.service';
+
+// Minimal user type for request operations - needs id, role, email for PDF generation
+type RequestUser = Pick<User, 'id' | 'role' | 'email'> & { name?: string | null };
 
 export class RequestService {
   private requestRepo: RequestRepository;
@@ -51,7 +54,7 @@ export class RequestService {
   }
 
   // Check access to request
-  private async checkAccess(requestId: string, user: User, action: 'view' | 'edit' | 'action'): Promise<any> {
+  private async checkAccess(requestId: string, user: RequestUser, action: 'view' | 'edit' | 'action'): Promise<any> {
     const request = await this.requestRepo.findById(requestId);
     if (!request) {
       throw new NotFoundError('Request not found');
@@ -75,7 +78,7 @@ export class RequestService {
   }
 
   // Create request (owner only)
-  async create(data: CreateRequestDto, user: User): Promise<any> {
+  async create(data: CreateRequestDto, user: RequestUser): Promise<any> {
     // Verify unit exists and belongs to owner (if not admin)
     const unit = await this.prisma.unit.findUnique({
       where: { id: data.unitId },
@@ -119,18 +122,18 @@ export class RequestService {
   }
 
   // List requests
-  async list(filters: RequestFiltersDto, user: User): Promise<any> {
+  async list(filters: RequestFiltersDto, user: RequestUser): Promise<any> {
     return this.requestRepo.findMany(filters, user);
   }
 
   // Get request details
-  async getById(id: string, user: User): Promise<any> {
+  async getById(id: string, user: RequestUser): Promise<any> {
     const request = await this.checkAccess(id, user, 'view');
     return this.updateIfExpired(request);
   }
 
   // Approve request (admin only)
-  async approve(id: string, data: ApproveRequestDto, user: User): Promise<any> {
+  async approve(id: string, data: ApproveRequestDto, user: RequestUser): Promise<any> {
     if (user.role !== 'ADMIN') {
       throw new ForbiddenError('Only administrators can approve requests');
     }
@@ -190,7 +193,7 @@ export class RequestService {
   }
 
   // Reject request (admin only)
-  async reject(id: string, data: RejectRequestDto, user: User): Promise<any> {
+  async reject(id: string, data: RejectRequestDto, user: RequestUser): Promise<any> {
     if (user.role !== 'ADMIN') {
       throw new ForbiddenError('Only administrators can reject requests');
     }
@@ -226,7 +229,7 @@ export class RequestService {
   }
 
   // Cancel request (owner can cancel their own submitted requests)
-  async cancel(id: string, user: User): Promise<any> {
+  async cancel(id: string, user: RequestUser): Promise<any> {
     const request = await this.checkAccess(id, user, 'view');
 
     if (request.status !== 'SUBMITTED') {
@@ -256,7 +259,7 @@ export class RequestService {
   }
 
   // Revoke request (admin only, revoke approved requests)
-  async revoke(id: string, reason: string, user: User): Promise<any> {
+  async revoke(id: string, reason: string, user: RequestUser): Promise<any> {
     if (user.role !== 'ADMIN') {
       throw new ForbiddenError('Only administrators can revoke requests');
     }
@@ -287,7 +290,7 @@ export class RequestService {
   }
 
   // Generate PDF
-  private async generateRequestPDF(request: any, user: User): Promise<{ pdfUrl: string; pdfPublicId: string }> {
+  private async generateRequestPDF(request: any, user: RequestUser): Promise<{ pdfUrl: string; pdfPublicId: string }> {
     return this.documentService.generateRequestInvitation(request, user);
   }
 
