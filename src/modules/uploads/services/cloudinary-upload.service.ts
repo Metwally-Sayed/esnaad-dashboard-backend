@@ -52,10 +52,18 @@ export class CloudinaryUploadService {
       'image/png',
       'image/gif',
       'image/webp',
+      'image/heic',
+      'image/heif',
       'application/pdf'
     ];
 
-    if (!allowedMimeTypes.includes(params.mimeType)) {
+    // Check MIME type or allow any image/* type (for mobile camera captures)
+    const isValidType =
+      allowedMimeTypes.includes(params.mimeType) ||
+      params.mimeType.startsWith('image/') ||
+      params.mimeType === ''; // Empty type can happen with some mobile uploads
+
+    if (!isValidType) {
       throw new AppError('Invalid file type. Only images and PDFs are allowed', 400);
     }
 
