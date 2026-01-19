@@ -46,6 +46,7 @@ export const getAllDocumentsQuerySchema = z.object({
     sortBy: z.string().optional(),
     sortOrder: z.enum(['asc', 'desc']).optional(),
     unitId: z.string().optional(),
+    uploadedByUserId: z.string().optional(),
     category: z.nativeEnum(DocumentCategory).optional(),
     search: z.string().optional(),
   }),

@@ -14,6 +14,9 @@ export function createHandoverRoutes(prisma: PrismaClient): Router {
   // Create handover (Admin only)
   router.post('/', requireRole(Role.ADMIN), controller.create);
 
+  // Get stats (Admin only) - MUST be before /:id route
+  router.get('/stats', requireRole(Role.ADMIN), controller.getStats);
+
   // List handovers (Admin only - owners cannot browse all handovers)
   router.get('/', requireRole(Role.ADMIN), controller.list);
 

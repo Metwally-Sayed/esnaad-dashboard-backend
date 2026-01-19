@@ -18,6 +18,9 @@ const unitsController = new UnitsController();
 // All routes require authentication
 router.use(requireAuth);
 
+// Get current user's units (for ownership transfer)
+router.get('/my-units', unitsController.getMyUnits);
+
 // Get all units (admin sees all, owner sees only their units)
 router.get('/', validate(getUnitsQuerySchema), unitsController.getUnits);
 

@@ -14,14 +14,18 @@ export class AuthRepository {
     name?: string;
     role?: Role;
   }): Promise<User> {
+    const role = data.role || Role.OWNER;
+
     return prisma.user.create({
       data: {
         email: data.email,
         password: data.password,
         name: data.name,
-        role: data.role || Role.OWNER,
+        role: role,
         emailVerified: false,
         isActive: true,
+        // Set verification status based on role
+        verificationStatus: role === Role.ADMIN ? 'NOT_REQUIRED' : 'PENDING_DOCUMENTS',
       },
     });
   }

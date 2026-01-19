@@ -7,6 +7,7 @@ export const getUnitsQuerySchema = z.object({
     sortBy: z.string().optional(),
     sortOrder: z.enum(['asc', 'desc']).optional(),
     search: z.string().optional(),
+    projectId: z.string().optional(),
     ownerId: z.string().optional(),
     hasOwner: z.enum(['true', 'false']).optional(),
   }),
@@ -34,6 +35,7 @@ export const createUnitSchema = z.object({
     documentUrls: z.array(z.string().url()).optional(),
     projectId: z.string().optional(),
     ownerId: z.string().optional(),
+    price: z.number().positive().optional(), // Unit price for service charge calculation
   }),
 });
 
@@ -56,6 +58,7 @@ export const updateUnitSchema = z.object({
     documentUrls: z.array(z.string().url()).optional(),
     projectId: z.string().optional(),
     ownerId: z.string().optional(),
+    price: z.number().positive().optional(), // Unit price for service charge calculation
   }),
 });
 

@@ -86,6 +86,11 @@ export class CloudinaryUploadService {
     console.log('  File name:', params.fileName);
     console.log('  File size:', params.fileBuffer.length, 'bytes');
     console.log('  MIME type:', params.mimeType);
+    console.log('  🔍 Buffer check:', {
+      isEmpty: params.fileBuffer.length === 0,
+      firstBytes: params.fileBuffer.length > 0 ? params.fileBuffer.slice(0, 20).toString('hex') : 'EMPTY',
+      lastBytes: params.fileBuffer.length > 0 ? params.fileBuffer.slice(-20).toString('hex') : 'EMPTY'
+    });
 
     try {
       // Determine resource type based on MIME type
@@ -120,6 +125,13 @@ export class CloudinaryUploadService {
       console.log('  Public ID:', result.public_id);
       console.log('  Resource Type:', result.resource_type);
       console.log('  Format:', result.format);
+      console.log('  📊 Cloudinary file info:', {
+        bytes: result.bytes || 0,
+        width: result.width || 'N/A',
+        height: result.height || 'N/A',
+        pages: result.pages || 'N/A',
+        version: result.version || 'N/A'
+      });
 
       return {
         publicUrl: result.secure_url,

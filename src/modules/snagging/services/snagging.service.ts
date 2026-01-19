@@ -514,6 +514,44 @@ export class SnaggingService {
     return updated;
   }
 
+  // Get stats for snaggings (ADMIN ONLY)
+  async getStats(user: AuthUser) {
+    if (user.role !== 'ADMIN') {
+      throw new ForbiddenError('Only administrators can view stats');
+    }
+
+    // Get all counts in parallel for efficiency
+    const [total, draft, sentToOwner, accepted, cancelled, withPdf, withImages] = await Promise.all([
+      prisma.snagging.count(),
+      prisma.snagging.count({ where: { status: 'DRAFT' } }),
+      prisma.snagging.count({ where: { status: 'SENT_TO_OWNER' } }),
+      prisma.snagging.count({ where: { status: 'ACCEPTED' } }),
+      prisma.snagging.count({ where: { status: 'CANCELLED' } }),
+      prisma.snagging.count({ where: { pdfUrl: { not: null } } }),
+      prisma.snagging.count({
+        where: {
+          items: {
+            some: {
+              images: {
+                some: {}
+              }
+            }
+          }
+        }
+      })
+    ]);
+
+    return {
+      total,
+      draft,
+      sentToOwner,
+      accepted,
+      cancelled,
+      withPdf,
+      withImages
+    };
+  }
+
   // Get snaggings by unit (for owner widget)
   async getSnaggingsByUnitId(unitId: string, user: AuthUser) {
     // Verify user has access to this unit

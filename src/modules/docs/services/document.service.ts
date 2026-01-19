@@ -11,6 +11,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import puppeteer from 'puppeteer';
 import Handlebars from 'handlebars';
+import QRCode from 'qrcode';
 import { NotFoundError } from '@/common/errors/AppError';
 
 export class DocumentService {
@@ -388,6 +389,76 @@ export class DocumentService {
     const uploadResult = await this.cloudinaryService.uploadFileDirectly({
       fileBuffer: pdfBuffer,
       fileName: `request-${request.id}-${Date.now()}.pdf`,
+      mimeType: 'application/pdf',
+      userId: user.id
+    });
+
+    return {
+      pdfUrl: uploadResult.publicUrl,
+      pdfPublicId: uploadResult.key
+    };
+  }
+
+  // Generate tenant registration certificate PDF with QR code
+  async generateTenantRegistrationCertificate(request: any, user: DocUser): Promise<{ pdfUrl: string; pdfPublicId: string }> {
+    this.registerHelpers();
+
+    // Generate verification URL
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const verificationUrl = `${frontendUrl}/requests/${request.id}`;
+
+    // Generate QR code as data URL
+    const qrCodeDataUrl = await QRCode.toDataURL(verificationUrl, {
+      width: 200,
+      margin: 2,
+      color: {
+        dark: '#1d4ed8',
+        light: '#ffffff'
+      }
+    });
+
+    // Load template
+    const templatePath = path.join(
+      __dirname,
+      '../templates/tenant-registration-v1.hbs'
+    );
+    const templateContent = await fs.readFile(templatePath, 'utf-8');
+    const template = Handlebars.compile(templateContent);
+
+    // Prepare data for template
+    const templateData = {
+      request: {
+        id: request.id,
+        approvedAt: request.approvedAt,
+        createdAt: request.createdAt
+      },
+      unit: request.unit,
+      owner: request.owner,
+      tenant: {
+        name: request.tenantName,
+        email: request.tenantEmail,
+        phone: request.tenantPhone
+      },
+      admin: request.approvedByAdmin,
+      qrCodeDataUrl,
+      verificationUrl,
+      generatedAt: new Date(),
+      generatedBy: {
+        name: user.name || user.email,
+        email: user.email
+      }
+    };
+
+    // Generate HTML
+    const html = template(templateData);
+
+    // Generate PDF
+    const pdfBuffer = await this.generatePDFFromHTML(html);
+
+    // Upload to Cloudinary
+    const uploadResult = await this.cloudinaryService.uploadFileDirectly({
+      fileBuffer: pdfBuffer,
+      fileName: `tenant-certificate-${request.id}-${Date.now()}.pdf`,
       mimeType: 'application/pdf',
       userId: user.id
     });

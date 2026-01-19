@@ -72,6 +72,10 @@ export class UnitDocumentsService {
       where.unitId = query.unitId;
     }
 
+    if (query.uploadedByUserId) {
+      where.uploadedByUserId = query.uploadedByUserId;
+    }
+
     if (query.category) {
       where.category = query.category;
     }
@@ -161,18 +165,19 @@ export class UnitDocumentsService {
   async getDownloadUrl(
     id: string,
     requestingUser: { id: string; role: Role }
-  ): Promise<{ downloadUrl: string }> {
+  ): Promise<{ url: string }> {
     const document = await this.getDocumentById(id, requestingUser);
 
-    // Generate presigned download URL (valid for 1 hour)
-    const downloadUrl = await this.r2Service.getPresignedUploadUrl({
-      fileName: document.title,
-      mimeType: document.mimeType,
-      sizeBytes: document.sizeBytes,
-      userId: requestingUser.id,
-    });
+    // Documents are stored on Cloudinary, use the stored URL
+    // If fileKey is a full URL (new format), use it directly
+    // Otherwise construct the Cloudinary URL from the public_id
+    const url = document.fileKey.startsWith('https://')
+      ? document.fileKey
+      : getCloudinaryUrl(document.fileKey);
 
-    return { downloadUrl: downloadUrl.publicUrl };
+    console.log('📥 [Download] Returning URL:', url.substring(0, 80) + '...');
+
+    return { url };
   }
 
   async deleteDocument(
@@ -259,6 +264,7 @@ export class UnitDocumentsService {
   private addPublicUrl(document: UnitDocument): UnitDocumentWithUrl {
     // If fileKey already looks like a full URL (starts with https://), use it as-is
     if (document.fileKey.startsWith('https://')) {
+      console.log('📄 Document URL - Using stored full URL:',  document.fileKey.substring(0, 80) + '...');
       return {
         ...document,
         publicUrl: document.fileKey,
@@ -266,9 +272,12 @@ export class UnitDocumentsService {
     }
 
     // Otherwise construct the Cloudinary URL from the public_id
+    const constructedUrl = getCloudinaryUrl(document.fileKey);
+    console.log('📄 Document URL - Constructed from key:', document.fileKey);
+    console.log('  Result:', constructedUrl.substring(0, 80) + '...');
     return {
       ...document,
-      publicUrl: getCloudinaryUrl(document.fileKey),
+      publicUrl: constructedUrl,
     };
   }
 

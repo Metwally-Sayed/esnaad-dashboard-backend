@@ -36,6 +36,23 @@ export const create = async (
 };
 
 /**
+ * GET /api/snaggings/stats
+ * Get snagging statistics (ADMIN ONLY)
+ */
+export const getStats = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const stats = await snaggingService.getStats(req.user!);
+    res.json(successResponse(stats));
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
  * GET /api/snaggings
  * List all snaggings with pagination and filters (ADMIN ONLY)
  */

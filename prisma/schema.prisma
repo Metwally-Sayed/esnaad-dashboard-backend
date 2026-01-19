@@ -12,6 +12,25 @@ enum Role {
   OWNER
 }
 
+enum OwnerVerificationStatus {
+  NOT_REQUIRED      // For ADMIN users (skip verification)
+  PENDING_DOCUMENTS // Owner needs to upload passport/ID
+  PENDING_APPROVAL  // Documents uploaded, waiting for admin
+  APPROVED          // Admin approved, can access dashboard
+  REJECTED          // Admin rejected, must re-upload
+}
+
+enum OwnerDocumentType {
+  PASSPORT
+  NATIONAL_ID
+}
+
+enum DocumentApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 enum OtpPurpose {
   REGISTRATION
   PASSWORD_RESET
@@ -40,6 +59,9 @@ enum AuditAction {
   SNAGGING_CANCELLED
   SNAGGING_APPOINTMENT_SET
   SNAGGING_PDF_GENERATED
+  SNAGGING_MESSAGE_CREATED
+  SNAGGING_MESSAGE_UPDATED
+  SNAGGING_MESSAGE_DELETED
   HANDOVER_CREATED
   HANDOVER_UPDATED
   HANDOVER_SENT_TO_OWNER
@@ -59,6 +81,19 @@ enum AuditAction {
   REQUEST_REJECTED
   REQUEST_CANCELLED
   REQUEST_REVOKED
+  REQUEST_MESSAGE_CREATED
+  REQUEST_MESSAGE_DELETED
+  OWNER_DOCUMENT_UPLOADED
+  OWNER_DOCUMENT_DELETED
+  OWNER_DOCUMENT_APPROVED
+  OWNER_DOCUMENT_REJECTED
+  OWNER_VERIFICATION_APPROVED
+  OWNER_VERIFICATION_REJECTED
+  SERVICE_CHARGE_CREATED
+  SERVICE_CHARGE_UPDATED
+  SERVICE_CHARGE_DELETED
+  UNIT_SERVICE_CHARGE_OVERRIDDEN
+  SERVICE_CHARGE_STATEMENT_GENERATED
 }
 
 enum DocumentCategory {
@@ -68,6 +103,10 @@ enum DocumentCategory {
 }
 
 enum SnaggingStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
   DRAFT
   SENT_TO_OWNER
   ACCEPTED
@@ -114,18 +153,20 @@ enum DocumentType {
 
 // Main user model
 model User {
-  id            String   @id @default(cuid())
-  email         String   @unique
-  password      String
-  name          String?
-  phone         String? // Phone number
-  address       String?  @db.Text // Physical address
-  nationalId    String?  @unique // National ID / Iqama number
-  role          Role     @default(OWNER)
-  emailVerified Boolean  @default(false)
-  isActive      Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id                 String                   @id @default(cuid())
+  email              String                   @unique
+  password           String
+  name               String?
+  phone              String? // Phone number
+  address            String?                  @db.Text // Physical address
+  nationalId         String?                  @unique // National ID / Iqama number
+  role               Role                     @default(OWNER)
+  emailVerified      Boolean                  @default(false)
+  isActive           Boolean                  @default(true)
+  verificationStatus OwnerVerificationStatus  @default(PENDING_DOCUMENTS)
+  verificationNote   String? // Admin rejection reason
+  createdAt          DateTime                 @default(now())
+  updatedAt          DateTime                 @updatedAt
 
   // Relations
   ownedUnits            Unit[]
@@ -138,13 +179,20 @@ model User {
   handoverMessages      HandoverMessage[] @relation("HandoverMessages")
   createdDocuments      Document[]        @relation("DocumentCreator")
   uploadedUnitDocuments UnitDocument[]    @relation("UnitDocumentUploader")
-  requestsAsOwner       Request[]         @relation("RequestOwner")
-  approvedRequests      Request[]         @relation("RequestApprovedBy")
-  rejectedRequests      Request[]         @relation("RequestRejectedBy")
+  requestsAsOwner          Request[]                @relation("RequestOwner")
+  incomingTransfers        Request[]                @relation("TransferToOwner")
+  approvedRequests         Request[]                @relation("RequestApprovedBy")
+  rejectedRequests         Request[]                @relation("RequestRejectedBy")
+  requestMessages          RequestMessage[]         @relation("RequestMessages")
+  ownerDocuments           OwnerDocument[]          @relation("OwnerDocuments")
+  reviewedDocuments        OwnerDocument[]          @relation("DocumentReviewer")
+  createdServiceCharges    ProjectServiceCharge[]   @relation("ServiceChargeCreator")
+  overriddenServiceCharges UnitServiceCharge[]      @relation("ServiceChargeOverrider")
 
   @@index([email])
   @@index([role])
   @@index([nationalId])
+  @@index([verificationStatus])
   @@map("users")
 }
 
@@ -163,7 +211,8 @@ model Project {
   updatedAt DateTime @updatedAt
 
   // Relations
-  units Unit[]
+  units          Unit[]
+  serviceCharges ProjectServiceCharge[]
 
   @@index([name])
   @@index([status])
@@ -185,6 +234,7 @@ model Unit {
   address      String?
   amenities    String?
   unitType     String?
+  price        Decimal?       @db.Decimal(12, 2) // Unit price for service charge calculation
 
   ownerId   String?
   projectId String?
@@ -193,13 +243,14 @@ model Unit {
   updatedAt DateTime @updatedAt
 
   // Relations
-  owner     User?          @relation(fields: [ownerId], references: [id], onDelete: SetNull)
-  project   Project?       @relation(fields: [projectId], references: [id])
-  auditLogs AuditLog[]
-  snaggings Snagging[]
-  handovers Handover[]
-  documents UnitDocument[]
-  requests  Request[]
+  owner          User?                @relation(fields: [ownerId], references: [id], onDelete: SetNull)
+  project        Project?             @relation(fields: [projectId], references: [id])
+  auditLogs      AuditLog[]
+  snaggings      Snagging[]
+  handovers      Handover[]
+  documents      UnitDocument[]
+  requests       Request[]
+  serviceCharges UnitServiceCharge[]
 
   @@index([unitNumber])
   @@index([ownerId])
@@ -512,10 +563,37 @@ model UnitDocument {
   @@map("unit_documents")
 }
 
+// Owner Documents for verification (passport, national ID)
+model OwnerDocument {
+  id                String                 @id @default(cuid())
+  userId            String
+  type              OwnerDocumentType
+  fileKey           String // Cloudinary URL
+  mimeType          String
+  sizeBytes         Int
+  status            DocumentApprovalStatus @default(PENDING)
+  rejectionReason   String?
+  reviewedByAdminId String?
+  reviewedAt        DateTime?
+  createdAt         DateTime               @default(now())
+  updatedAt         DateTime               @updatedAt
+
+  // Relations
+  user            User  @relation("OwnerDocuments", fields: [userId], references: [id], onDelete: Cascade)
+  reviewedByAdmin User? @relation("DocumentReviewer", fields: [reviewedByAdminId], references: [id])
+
+  @@index([userId])
+  @@index([status])
+  @@map("owner_documents")
+}
+
 // Request enums
 enum RequestType {
   GUEST_VISIT
   WORK_PERMISSION
+  OWNERSHIP_TRANSFER
+  TENANT_REGISTRATION
+  UNIT_MODIFICATIONS
 }
 
 enum RequestStatus {
@@ -532,6 +610,11 @@ enum ExpiresMode {
   UNLIMITED
 }
 
+enum ServiceChargePeriodType {
+  YEARLY
+  QUARTERLY
+}
+
 // Requests / Invitations model
 model Request {
   id      String        @id @default(cuid())
@@ -546,6 +629,30 @@ model Request {
   visitorPhone       String?
   companyName        String?
   representativeName String?
+
+  // Ownership Transfer info
+  transferUnitIds String[] @default([])
+  newOwnerId      String?
+  newOwnerName    String?
+  newOwnerEmail   String?
+  newOwnerPhone   String?
+  message         String?  @db.Text
+
+  // Tenant Registration info
+  tenantName      String?
+  tenantEmail     String?
+  tenantPhone     String?
+  emiratesIdUrl   String?  // R2/Cloudinary URL for Emirates ID document
+  passportUrl     String?  // R2/Cloudinary URL for passport document
+  rentContractUrl String?  // R2/Cloudinary URL for rent contract PDF
+  ijaryUrl        String?  // R2/Cloudinary URL for Ijary PDF
+
+  // Unit Modifications info
+  modificationType      String?  // Predefined type: RENOVATION, REPAIR, ADDITION, etc.
+  modificationTypeOther String?  // Custom type when 'OTHER' is selected
+  modificationMessage   String?  @db.Text  // Description of the modification
+  contactEmail          String?  // Contact email (pre-filled from owner, editable)
+  contactPhone          String?  // Contact phone (pre-filled from owner, editable)
 
   // Schedule
   startAt DateTime?
@@ -574,10 +681,12 @@ model Request {
   deletedAt DateTime?
 
   // Relations
-  unit            Unit  @relation(fields: [unitId], references: [id], onDelete: Cascade)
-  owner           User  @relation("RequestOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-  approvedByAdmin User? @relation("RequestApprovedBy", fields: [approvedByAdminId], references: [id], onDelete: SetNull)
-  rejectedByAdmin User? @relation("RequestRejectedBy", fields: [rejectedByAdminId], references: [id], onDelete: SetNull)
+  unit            Unit             @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  owner           User             @relation("RequestOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  newOwner        User?            @relation("TransferToOwner", fields: [newOwnerId], references: [id], onDelete: SetNull)
+  approvedByAdmin User?            @relation("RequestApprovedBy", fields: [approvedByAdminId], references: [id], onDelete: SetNull)
+  rejectedByAdmin User?            @relation("RequestRejectedBy", fields: [rejectedByAdminId], references: [id], onDelete: SetNull)
+  messages        RequestMessage[]
 
   @@index([ownerId, createdAt])
   @@index([unitId, createdAt])
@@ -585,4 +694,80 @@ model Request {
   @@index([type])
   @@index([deletedAt])
   @@map("requests")
+}
+
+// Request Messages - for communication between admin and owner on unit modification requests
+model RequestMessage {
+  id           String    @id @default(cuid())
+  requestId    String
+  authorUserId String
+  authorRole   Role
+  body         String    @db.Text
+  createdAt    DateTime  @default(now())
+  deletedAt    DateTime?
+
+  request Request @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  author  User    @relation("RequestMessages", fields: [authorUserId], references: [id])
+
+  @@index([requestId, createdAt])
+  @@index([authorUserId])
+  @@index([deletedAt])
+  @@map("request_messages")
+}
+
+// Project Service Charge - default service charge for a project
+model ProjectServiceCharge {
+  id              String                  @id @default(cuid())
+  projectId       String
+  year            Int                     // e.g., 2024
+  quarter         Int?                    // 1-4 for quarterly, null for yearly
+  periodType      ServiceChargePeriodType
+  percentage      Decimal                 @db.Decimal(5, 2)  // e.g., 5.00 = 5%
+  dueDate         DateTime?
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+  createdById     String
+
+  project         Project                 @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy       User                    @relation("ServiceChargeCreator", fields: [createdById], references: [id])
+  unitCharges     UnitServiceCharge[]
+
+  @@unique([projectId, year, quarter])
+  @@index([projectId])
+  @@index([year])
+  @@map("project_service_charges")
+}
+
+// Unit Service Charge - individual unit service charges with optional override
+model UnitServiceCharge {
+  id                      String                @id @default(cuid())
+  unitId                  String
+  projectServiceChargeId  String
+
+  // Calculated or overridden amount
+  amount                  Decimal               @db.Decimal(12, 2)
+  isOverridden            Boolean               @default(false)
+  overriddenAmount        Decimal?              @db.Decimal(12, 2)
+  overriddenById          String?
+  overriddenAt            DateTime?
+
+  // PDF Statement
+  pdfUrl                  String?               // Cloudinary URL for statement
+  pdfGeneratedAt          DateTime?
+
+  // Status
+  isPaid                  Boolean               @default(false)
+  paidAt                  DateTime?
+
+  createdAt               DateTime              @default(now())
+  updatedAt               DateTime              @updatedAt
+
+  unit                    Unit                  @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  projectServiceCharge    ProjectServiceCharge  @relation(fields: [projectServiceChargeId], references: [id], onDelete: Cascade)
+  overriddenBy            User?                 @relation("ServiceChargeOverrider", fields: [overriddenById], references: [id])
+
+  @@unique([unitId, projectServiceChargeId])
+  @@index([unitId])
+  @@index([projectServiceChargeId])
+  @@map("unit_service_charges")
 }

@@ -23,7 +23,13 @@ export class SnaggingRepository {
               floor: true,
               area: true,
               bedrooms: true,
-              address: true
+              address: true,
+              project: {
+                select: {
+                  id: true,
+                  name: true
+                }
+              }
             }
           },
           owner: {
@@ -156,16 +162,27 @@ export class SnaggingRepository {
             select: {
               id: true,
               unitNumber: true,
-              buildingName: true
+              buildingName: true,
+              project: {
+                select: {
+                  id: true,
+                  name: true
+                }
+              }
+            }
+          },
+          owner: {
+            select: {
+              id: true,
+              name: true,
+              email: true
             }
           },
           items: {
             orderBy: { sortOrder: 'asc' },
-            take: 3, // Just first few items for list view
             include: {
               images: {
-                orderBy: { sortOrder: 'asc' },
-                take: 1 // Just first image
+                orderBy: { sortOrder: 'asc' }
               }
             }
           }

@@ -19,9 +19,8 @@ export function getCloudinaryUrl(fileKey: string): string {
   // For raw files (PDFs), Cloudinary uses resource_type 'raw'
   const resourceType = 'raw';
 
-  // Cloudinary URL format: https://res.cloudinary.com/{cloud_name}/raw/upload/{public_id}
-  // Note: We're not including the version (v123456) which Cloudinary adds automatically
-  // The URL works without it, but if files aren't loading, we may need to store the full secure_url instead
+  // Cloudinary URL format without version (it will redirect to latest version)
+  // Format: https://res.cloudinary.com/{cloud_name}/raw/upload/{public_id}
 
   return `https://res.cloudinary.com/${cloudName}/${resourceType}/upload/${fileKey}`;
 }

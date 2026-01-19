@@ -7,6 +7,7 @@ import { Role } from '@prisma/client';
 import {
   create,
   list,
+  getStats,
   getById,
   update,
   sendToOwner,
@@ -38,6 +39,17 @@ router.use(requireAuth);
 // ⚠️ CRITICAL: SPECIFIC ROUTES MUST BE REGISTERED BEFORE PARAMETER ROUTES
 // Register /unit/:unitId BEFORE /:id to prevent route shadowing
 // This endpoint is accessible to both admin and owner (with permission checks in service)
+
+/**
+ * GET /api/snaggings/stats
+ * Get snagging statistics (ADMIN ONLY)
+ * Must be BEFORE /:id route
+ */
+router.get(
+  '/stats',
+  requireRole(Role.ADMIN),
+  getStats
+);
 
 /**
  * GET /api/snaggings/unit/:unitId

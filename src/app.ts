@@ -20,6 +20,8 @@ import { createDocumentRoutes } from './modules/docs/routes/document.routes';
 import unitDocumentsRoutes from './modules/unit-documents/routes/unit-documents.routes';
 import unitNestedDocumentsRoutes from './modules/unit-documents/routes/unit-nested-documents.routes';
 import { createRequestRoutes } from './modules/requests/routes/request.routes';
+import { createOwnerVerificationRoutes } from './modules/owner-verification/routes/owner-verification.routes';
+import serviceChargeRoutes from './modules/service-charge/routes/service-charge.routes';
 import { prisma } from './config/database';
 
 export const createApp = (): Application => {
@@ -86,6 +88,8 @@ export const createApp = (): Application => {
   app.use('/api/docs', createDocumentRoutes(prisma));
   app.use('/api/documents', unitDocumentsRoutes);
   app.use('/api/requests', createRequestRoutes());
+  app.use('/api/owner-verification', createOwnerVerificationRoutes());
+  app.use('/api', serviceChargeRoutes);
 
   // 404 handler
   app.use(notFoundHandler);

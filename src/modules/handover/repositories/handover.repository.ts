@@ -175,20 +175,33 @@ export class HandoverRepository {
               id: true,
               unitNumber: true,
               buildingName: true,
-              floor: true
+              floor: true,
+              project: {
+                select: {
+                  id: true,
+                  name: true
+                }
+              }
             }
           },
           owner: {
             select: {
               id: true,
               name: true,
-              email: true
+              email: true,
+              phone: true
             }
           },
           createdByAdmin: {
             select: {
               id: true,
               name: true
+            }
+          },
+          items: {
+            select: {
+              id: true,
+              status: true
             }
           },
           _count: {

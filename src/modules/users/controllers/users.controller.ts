@@ -20,6 +20,18 @@ export class UsersController {
     }
   };
 
+  searchUsers = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { q, role } = req.query;
+      const query = q as string || '';
+      const userRole = role as string | undefined;
+      const users = await this.usersService.searchUsers(query, userRole as any, 10);
+      res.json(successResponse(users));
+    } catch (error) {
+      next(error);
+    }
+  };
+
   getUserById = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { id } = req.params;

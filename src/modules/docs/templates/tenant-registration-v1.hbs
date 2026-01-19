@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tenant Registration Certificate</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      font-size: 12pt;
+      line-height: 1.6;
+      color: #1a1a1a;
+      background: white;
+    }
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 40px;
+    }
+    .header {
+      text-align: center;
+      margin-bottom: 40px;
+      border-bottom: 3px solid #2563eb;
+      padding-bottom: 20px;
+    }
+    .header h1 {
+      font-size: 28pt;
+      color: #2563eb;
+      margin-bottom: 10px;
+    }
+    .header .subtitle {
+      font-size: 14pt;
+      color: #64748b;
+    }
+    .certificate-badge {
+      display: inline-block;
+      background: #dbeafe;
+      color: #1d4ed8;
+      padding: 8px 16px;
+      border-radius: 20px;
+      font-weight: 600;
+      margin-top: 10px;
+    }
+    .section {
+      margin-bottom: 30px;
+    }
+    .section-title {
+      font-size: 16pt;
+      font-weight: 600;
+      color: #2563eb;
+      margin-bottom: 15px;
+      padding-bottom: 5px;
+      border-bottom: 2px solid #e2e8f0;
+    }
+    .info-grid {
+      display: table;
+      width: 100%;
+      margin-bottom: 15px;
+    }
+    .info-row {
+      display: table-row;
+    }
+    .info-label {
+      display: table-cell;
+      font-weight: 600;
+      color: #475569;
+      width: 200px;
+      padding: 8px 0;
+    }
+    .info-value {
+      display: table-cell;
+      padding: 8px 0;
+      color: #1a1a1a;
+    }
+    .two-column {
+      display: flex;
+      justify-content: space-between;
+      gap: 40px;
+    }
+    .column {
+      flex: 1;
+    }
+    .tenant-highlight {
+      background: #eff6ff;
+      border: 2px solid #2563eb;
+      border-radius: 8px;
+      padding: 20px;
+      margin: 20px 0;
+    }
+    .tenant-highlight .name {
+      font-size: 20pt;
+      font-weight: 700;
+      color: #1d4ed8;
+      margin-bottom: 10px;
+    }
+    .tenant-highlight .details {
+      color: #475569;
+    }
+    .qr-section {
+      text-align: center;
+      margin: 30px 0;
+      padding: 20px;
+      background: #f8fafc;
+      border-radius: 8px;
+    }
+    .qr-section img {
+      width: 150px;
+      height: 150px;
+    }
+    .qr-section .qr-label {
+      font-size: 10pt;
+      color: #64748b;
+      margin-top: 10px;
+    }
+    .qr-section .qr-id {
+      font-size: 9pt;
+      color: #94a3b8;
+      font-family: monospace;
+      margin-top: 5px;
+    }
+    .status-approved {
+      background: #dcfce7;
+      color: #15803d;
+      padding: 10px 20px;
+      border-radius: 8px;
+      text-align: center;
+      font-weight: 600;
+      font-size: 14pt;
+      margin: 20px 0;
+    }
+    .documents-list {
+      margin-top: 15px;
+    }
+    .document-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 0;
+      border-bottom: 1px solid #e2e8f0;
+    }
+    .document-item:last-child {
+      border-bottom: none;
+    }
+    .document-check {
+      color: #16a34a;
+      font-weight: bold;
+    }
+    .footer {
+      margin-top: 50px;
+      padding-top: 20px;
+      border-top: 2px solid #e2e8f0;
+      text-align: center;
+      font-size: 10pt;
+      color: #64748b;
+    }
+    .footer .notice {
+      margin-top: 15px;
+      padding: 10px;
+      background: #fef3c7;
+      border: 1px solid #f59e0b;
+      border-radius: 4px;
+      color: #92400e;
+      font-weight: 500;
+    }
+    .document-id {
+      font-size: 9pt;
+      color: #94a3b8;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <h1>Tenant Registration Certificate</h1>
+      <div class="subtitle">Esnaad Property Management</div>
+      <div class="certificate-badge">APPROVED</div>
+      <div class="document-id">Certificate ID: {{request.id}}</div>
+    </div>
+
+    <!-- Status -->
+    <div class="status-approved">
+      Tenant Registration Approved
+    </div>
+
+    <!-- Two Column Layout -->
+    <div class="two-column">
+      <!-- Unit Information -->
+      <div class="column">
+        <div class="section">
+          <div class="section-title">Unit Information</div>
+          <div class="info-grid">
+            <div class="info-row">
+              <div class="info-label">Unit Number:</div>
+              <div class="info-value">{{unit.unitNumber}}</div>
+            </div>
+            {{#if unit.buildingName}}
+            <div class="info-row">
+              <div class="info-label">Building:</div>
+              <div class="info-value">{{unit.buildingName}}</div>
+            </div>
+            {{/if}}
+            {{#if unit.floor}}
+            <div class="info-row">
+              <div class="info-label">Floor:</div>
+              <div class="info-value">{{unit.floor}}</div>
+            </div>
+            {{/if}}
+            {{#if unit.address}}
+            <div class="info-row">
+              <div class="info-label">Address:</div>
+              <div class="info-value">{{unit.address}}</div>
+            </div>
+            {{/if}}
+          </div>
+        </div>
+      </div>
+
+      <!-- QR Code -->
+      <div class="column">
+        <div class="qr-section">
+          <img src="{{qrCodeDataUrl}}" alt="Verification QR Code" />
+          <div class="qr-label">Scan to verify certificate</div>
+          <div class="qr-id">{{request.id}}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tenant Information -->
+    <div class="tenant-highlight">
+      <div class="name">{{tenant.name}}</div>
+      <div class="details">
+        <div><strong>Email:</strong> {{tenant.email}}</div>
+        <div><strong>Phone:</strong> {{tenant.phone}}</div>
+      </div>
+    </div>
+
+    <!-- Owner Information -->
+    <div class="section">
+      <div class="section-title">Property Owner</div>
+      <div class="info-grid">
+        <div class="info-row">
+          <div class="info-label">Name:</div>
+          <div class="info-value">{{owner.name}}</div>
+        </div>
+        <div class="info-row">
+          <div class="info-label">Email:</div>
+          <div class="info-value">{{owner.email}}</div>
+        </div>
+        {{#if owner.phone}}
+        <div class="info-row">
+          <div class="info-label">Phone:</div>
+          <div class="info-value">{{owner.phone}}</div>
+        </div>
+        {{/if}}
+      </div>
+    </div>
+
+    <!-- Documents Submitted -->
+    <div class="section">
+      <div class="section-title">Verified Documents</div>
+      <div class="documents-list">
+        <div class="document-item">
+          <span class="document-check">✓</span>
+          <span>Emirates ID</span>
+        </div>
+        <div class="document-item">
+          <span class="document-check">✓</span>
+          <span>Passport</span>
+        </div>
+        <div class="document-item">
+          <span class="document-check">✓</span>
+          <span>Rent Contract</span>
+        </div>
+        <div class="document-item">
+          <span class="document-check">✓</span>
+          <span>Ijary Certificate</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Approval Information -->
+    <div class="section">
+      <div class="section-title">Approval Details</div>
+      <div class="info-grid">
+        <div class="info-row">
+          <div class="info-label">Approved By:</div>
+          <div class="info-value">{{admin.name}}</div>
+        </div>
+        <div class="info-row">
+          <div class="info-label">Approval Date:</div>
+          <div class="info-value">{{formatDateTime request.approvedAt}}</div>
+        </div>
+        <div class="info-row">
+          <div class="info-label">Request Date:</div>
+          <div class="info-value">{{formatDateTime request.createdAt}}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+      <div>Generated on {{formatDateTime generatedAt}}</div>
+      <div>This document is electronically generated and does not require a signature</div>
+      <div class="notice">
+        This certificate confirms the tenant registration for the specified unit.
+        Present this document when required for verification purposes.
+      </div>
+    </div>
+  </div>
+</body>
+</html>

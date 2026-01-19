@@ -38,6 +38,20 @@ export class HandoverController {
     }
   };
 
+  // Get stats
+  getStats = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      const stats = await this.handoverService.getStats(req.user!);
+
+      res.json({
+        success: true,
+        data: stats
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
   // List handovers
   list = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {

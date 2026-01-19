@@ -184,6 +184,7 @@ export class AuthService {
         email: user.email,
         name: user.name,
         role: user.role,
+        verificationStatus: user.verificationStatus,
       },
       tokens,
     };
@@ -226,6 +227,7 @@ export class AuthService {
       id: user.id,
       email: user.email,
       role: user.role,
+      verificationStatus: user.verificationStatus,
     };
 
     return {

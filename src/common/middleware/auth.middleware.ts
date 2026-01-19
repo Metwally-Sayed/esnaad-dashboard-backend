@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import { Role } from '@prisma/client';
+import { Role, OwnerVerificationStatus } from '@prisma/client';
 import { env } from '../../config/env';
 import { UnauthorizedError, ForbiddenError } from '../errors';
 
@@ -8,6 +8,7 @@ interface JwtPayload {
   id: string;
   email: string;
   role: Role;
+  verificationStatus?: OwnerVerificationStatus;
 }
 
 export const requireAuth = async (
@@ -28,6 +29,7 @@ export const requireAuth = async (
       id: decoded.id,
       email: decoded.email,
       role: decoded.role,
+      verificationStatus: decoded.verificationStatus,
     };
 
     next();

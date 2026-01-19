@@ -5,7 +5,9 @@ import {
   CreateRequestSchema,
   ApproveRequestSchema,
   RejectRequestSchema,
-  RequestFiltersSchema
+  RequestFiltersSchema,
+  CreateMessageSchema,
+  MessageFiltersSchema
 } from '../dto/request.dto';
 import { ValidationError } from '@/common/errors/AppError';
 
@@ -136,6 +138,69 @@ export class RequestController {
       res.json({
         success: true,
         data: request
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  // ==================== MESSAGE ENDPOINTS ====================
+
+  // Create a message
+  createMessage = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const validation = CreateMessageSchema.safeParse(req.body);
+      if (!validation.success) {
+        throw new ValidationError(validation.error.issues[0].message);
+      }
+
+      const message = await this.requestService.createMessage(
+        req.params.id,
+        validation.data,
+        req.user!
+      );
+
+      res.status(201).json({
+        success: true,
+        data: message
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  // Get messages for a request
+  getMessages = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const validation = MessageFiltersSchema.safeParse(req.query);
+      if (!validation.success) {
+        throw new ValidationError(validation.error.issues[0].message);
+      }
+
+      const result = await this.requestService.getMessages(
+        req.params.id,
+        validation.data,
+        req.user!
+      );
+
+      res.json({
+        success: true,
+        data: result.data,
+        nextCursor: result.nextCursor
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  // Delete a message
+  deleteMessage = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const message = await this.requestService.deleteMessage(req.params.messageId, req.user!);
+
+      res.json({
+        success: true,
+        data: message
       });
     } catch (error) {
       next(error);

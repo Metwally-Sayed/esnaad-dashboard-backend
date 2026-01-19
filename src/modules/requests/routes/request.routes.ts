@@ -31,5 +31,10 @@ export function createRequestRoutes(): Router {
   // Owner can cancel their own submitted requests
   router.post('/:id/cancel', controller.cancel);
 
+  // Message endpoints - accessible by both admin and owner
+  router.get('/:id/messages', controller.getMessages);
+  router.post('/:id/messages', controller.createMessage);
+  router.delete('/:id/messages/:messageId', controller.deleteMessage);
+
   return router;
 }

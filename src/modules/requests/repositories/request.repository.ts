@@ -1,5 +1,5 @@
 import { PrismaClient, Prisma, Role } from '@prisma/client';
-import { RequestFiltersDto } from '../dto/request.dto';
+import { RequestFiltersDto, MessageFiltersDto } from '../dto/request.dto';
 
 // Minimal user type for repository operations
 type RepoUser = { id: string; role: Role };
@@ -231,6 +231,96 @@ export class RequestRepository {
   // Delete (soft delete)
   async delete(id: string) {
     return this.prisma.request.update({
+      where: { id },
+      data: { deletedAt: new Date() }
+    });
+  }
+
+  // ==================== MESSAGE METHODS ====================
+
+  // Create a message
+  async createMessage(data: {
+    requestId: string;
+    authorUserId: string;
+    authorRole: Role;
+    body: string;
+  }) {
+    return this.prisma.requestMessage.create({
+      data,
+      include: {
+        author: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            role: true
+          }
+        }
+      }
+    });
+  }
+
+  // Get messages with cursor-based pagination
+  async getMessages(requestId: string, filters: MessageFiltersDto) {
+    const where = {
+      requestId,
+      deletedAt: null
+    };
+
+    const messages = await this.prisma.requestMessage.findMany({
+      where,
+      include: {
+        author: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            role: true
+          }
+        }
+      },
+      orderBy: { createdAt: 'asc' },
+      take: filters.limit,
+      ...(filters.cursor && {
+        skip: 1,
+        cursor: { id: filters.cursor }
+      })
+    });
+
+    const nextCursor = messages.length === filters.limit ? messages[messages.length - 1]?.id : undefined;
+
+    return {
+      data: messages,
+      nextCursor
+    };
+  }
+
+  // Find message by ID
+  async findMessageById(id: string) {
+    return this.prisma.requestMessage.findUnique({
+      where: { id },
+      include: {
+        author: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            role: true
+          }
+        },
+        request: {
+          select: {
+            id: true,
+            ownerId: true
+          }
+        }
+      }
+    });
+  }
+
+  // Delete message (soft delete)
+  async deleteMessage(id: string) {
+    return this.prisma.requestMessage.update({
       where: { id },
       data: { deletedAt: new Date() }
     });

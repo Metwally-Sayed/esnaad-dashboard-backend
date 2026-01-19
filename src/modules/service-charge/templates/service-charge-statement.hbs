@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Service Charge Statement</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: white;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            padding-bottom: 20px;
+            border-bottom: 3px solid #2563eb;
+        }
+
+        .header h1 {
+            color: #1e40af;
+            font-size: 28px;
+            margin-bottom: 10px;
+        }
+
+        .header .subtitle {
+            color: #64748b;
+            font-size: 14px;
+        }
+
+        .section {
+            margin-bottom: 30px;
+        }
+
+        .section-title {
+            background: #f1f5f9;
+            padding: 10px 15px;
+            margin-bottom: 15px;
+            border-left: 4px solid #2563eb;
+            font-size: 18px;
+            font-weight: bold;
+            color: #1e40af;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+
+        .info-item {
+            padding: 10px;
+            background: #fafafa;
+            border-radius: 4px;
+        }
+
+        .info-item.full-width {
+            grid-column: 1 / -1;
+        }
+
+        .info-label {
+            font-weight: bold;
+            color: #64748b;
+            font-size: 12px;
+            text-transform: uppercase;
+            margin-bottom: 5px;
+        }
+
+        .info-value {
+            color: #1e293b;
+            font-size: 14px;
+        }
+
+        .breakdown-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+            background: white;
+        }
+
+        .breakdown-table th {
+            background: #e2e8f0;
+            padding: 12px;
+            text-align: left;
+            font-size: 14px;
+            color: #475569;
+            border-bottom: 2px solid #cbd5e1;
+        }
+
+        .breakdown-table td {
+            padding: 12px;
+            border-bottom: 1px solid #e2e8f0;
+            font-size: 14px;
+        }
+
+        .breakdown-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .breakdown-table .amount {
+            text-align: right;
+            font-weight: 600;
+            color: #1e293b;
+        }
+
+        .total-row {
+            background: #f8fafc !important;
+            font-weight: bold;
+        }
+
+        .total-row td {
+            padding: 15px 12px !important;
+            border-top: 2px solid #2563eb;
+            font-size: 16px;
+        }
+
+        .total-amount {
+            color: #1e40af;
+            font-size: 18px;
+        }
+
+        .override-badge {
+            display: inline-block;
+            background: #fef3c7;
+            color: #92400e;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            margin-left: 8px;
+        }
+
+        .strikethrough {
+            text-decoration: line-through;
+            color: #94a3b8;
+        }
+
+        .payment-section {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 20px;
+            margin-top: 30px;
+        }
+
+        .payment-section h3 {
+            color: #1e40af;
+            font-size: 16px;
+            margin-bottom: 10px;
+        }
+
+        .payment-section p {
+            color: #64748b;
+            font-size: 14px;
+            margin-bottom: 8px;
+        }
+
+        .footer {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #e2e8f0;
+            text-align: center;
+            color: #94a3b8;
+            font-size: 12px;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .status-paid {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .status-pending {
+            background: #fed7aa;
+            color: #9a3412;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>Service Charge Statement</h1>
+            <div class="subtitle">{{period}}</div>
+        </div>
+
+        <!-- Unit Information -->
+        <div class="section">
+            <div class="section-title">Unit Information</div>
+            <div class="info-grid">
+                <div class="info-item">
+                    <div class="info-label">Unit Number</div>
+                    <div class="info-value">{{unitNumber}}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Building</div>
+                    <div class="info-value">{{buildingName}}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Project</div>
+                    <div class="info-value">{{projectName}}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Location</div>
+                    <div class="info-value">{{projectLocation}}</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Owner Information -->
+        <div class="section">
+            <div class="section-title">Owner Information</div>
+            <div class="info-grid">
+                <div class="info-item">
+                    <div class="info-label">Owner Name</div>
+                    <div class="info-value">{{ownerName}}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Email</div>
+                    <div class="info-value">{{ownerEmail}}</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Service Charge Breakdown -->
+        <div class="section">
+            <div class="section-title">Service Charge Breakdown</div>
+            <table class="breakdown-table">
+                <thead>
+                    <tr>
+                        <th>Description</th>
+                        <th style="text-align: right;">Amount (AED)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Unit Value</td>
+                        <td class="amount">{{unitPrice}}</td>
+                    </tr>
+                    <tr>
+                        <td>Service Charge Rate</td>
+                        <td class="amount">{{percentage}}%</td>
+                    </tr>
+                    <tr>
+                        <td>
+                            Calculated Amount
+                            {{#if isOverridden}}
+                            <span class="override-badge">OVERRIDDEN</span>
+                            {{/if}}
+                        </td>
+                        <td class="amount {{#if isOverridden}}strikethrough{{/if}}">
+                            {{calculatedAmount}}
+                        </td>
+                    </tr>
+                    {{#if isOverridden}}
+                    <tr>
+                        <td>Overridden Amount</td>
+                        <td class="amount">{{overriddenAmount}}</td>
+                    </tr>
+                    {{/if}}
+                    <tr class="total-row">
+                        <td><strong>Total Amount Due</strong></td>
+                        <td class="amount total-amount">{{finalAmount}}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Payment Information -->
+        <div class="section">
+            <div class="section-title">Payment Information</div>
+            <div class="info-grid">
+                <div class="info-item">
+                    <div class="info-label">Due Date</div>
+                    <div class="info-value">{{dueDate}}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Status</div>
+                    <div class="info-value">
+                        {{#if isPaid}}
+                        <span class="status-badge status-paid">PAID</span>
+                        {{else}}
+                        <span class="status-badge status-pending">PENDING</span>
+                        {{/if}}
+                    </div>
+                </div>
+                {{#if isPaid}}
+                <div class="info-item">
+                    <div class="info-label">Paid On</div>
+                    <div class="info-value">{{paidAt}}</div>
+                </div>
+                {{/if}}
+            </div>
+        </div>
+
+        <!-- Payment Instructions -->
+        <div class="payment-section">
+            <h3>Payment Instructions</h3>
+            <p>Please make payment to the following account before the due date:</p>
+            <p><strong>Bank:</strong> [Bank Name]</p>
+            <p><strong>Account Name:</strong> [Account Name]</p>
+            <p><strong>Account Number:</strong> [Account Number]</p>
+            <p><strong>IBAN:</strong> [IBAN Number]</p>
+            <p><strong>Reference:</strong> {{unitNumber}} - {{period}}</p>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+            <p>Statement generated on {{generatedDate}}</p>
+            <p>For inquiries, please contact our administration office.</p>
+        </div>
+    </div>
+</body>
+</html>

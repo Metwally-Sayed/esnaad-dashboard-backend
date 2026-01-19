@@ -20,6 +20,15 @@ export class UnitsController {
     }
   };
 
+  getMyUnits = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const units = await this.unitsService.getUnitsByOwner(req.user!.id);
+      res.json(successResponse(units));
+    } catch (error) {
+      next(error);
+    }
+  };
+
   getUnitById = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { id } = req.params;

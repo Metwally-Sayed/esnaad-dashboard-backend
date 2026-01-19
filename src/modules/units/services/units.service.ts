@@ -32,6 +32,11 @@ export class UnitsService {
       where.ownerId = requestingUser.id;
     }
 
+    // Project filter
+    if (query.projectId) {
+      where.projectId = query.projectId;
+    }
+
     // Owner filter (admin only)
     if (query.ownerId && requestingUser.role === Role.ADMIN) {
       where.ownerId = query.ownerId;
@@ -77,6 +82,15 @@ export class UnitsService {
     }
 
     return unit;
+  }
+
+  async getUnitsByOwner(ownerId: string): Promise<Unit[]> {
+    return this.unitsRepo.findAll({
+      skip: 0,
+      take: 1000, // Get all units for owner (reasonable limit)
+      where: { ownerId },
+      orderBy: { unitNumber: 'asc' },
+    });
   }
 
   async createUnit(

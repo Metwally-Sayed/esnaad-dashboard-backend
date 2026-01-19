@@ -113,6 +113,25 @@ export class UsersService {
     return updatedUser;
   }
 
+  async searchUsers(query: string, role?: Role, limit: number = 10): Promise<UserWithoutPassword[]> {
+    const where: Prisma.UserWhereInput = {
+      isActive: true,
+      role: role || undefined,
+      OR: [
+        { name: { contains: query, mode: 'insensitive' } },
+        { email: { contains: query, mode: 'insensitive' } },
+        { phone: { contains: query, mode: 'insensitive' } },
+      ],
+    };
+
+    return this.usersRepo.findAll({
+      skip: 0,
+      take: Math.min(limit, 20), // Max 20 results
+      where,
+      orderBy: { name: 'asc' },
+    });
+  }
+
   async deleteUser(
     id: string,
     requestingUser: { id: string; role: Role }

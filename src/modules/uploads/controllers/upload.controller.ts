@@ -82,7 +82,9 @@ export const uploadFileDirect = async (
     console.log('  User ID:', userId);
     console.log('  File name:', req.file.originalname);
     console.log('  MIME type:', req.file.mimetype);
-    console.log('  File size:', req.file.size);
+    console.log('  File size:', req.file.size, 'bytes');
+    console.log('  Buffer length:', req.file.buffer.length, 'bytes');
+    console.log('  Buffer is empty?', req.file.buffer.length === 0);
 
     const result = await cloudinaryUploadService.uploadFileDirectly({
       fileBuffer: req.file.buffer,

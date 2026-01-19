@@ -16,6 +16,12 @@ const usersController = new UsersController();
 // All routes require authentication
 router.use(requireAuth);
 
+// Search users (for ownership transfer - owners can search for other owners)
+router.get(
+  '/search',
+  usersController.searchUsers
+);
+
 // Get all users (admin only)
 router.get(
   '/',

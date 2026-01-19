@@ -149,6 +149,33 @@ export class HandoverService {
     return handover;
   }
 
+  // Get stats for handovers (ADMIN ONLY)
+  async getStats(user: User) {
+    if (user.role !== 'ADMIN') {
+      throw new ForbiddenError('Only administrators can view stats');
+    }
+
+    // Get all counts in parallel for efficiency
+    const [total, draft, sentToOwner, accepted, cancelled, withPdf] = await Promise.all([
+      this.prisma.handover.count(),
+      this.prisma.handover.count({ where: { status: 'DRAFT' } }),
+      this.prisma.handover.count({ where: { status: 'SENT_TO_OWNER' } }),
+      this.prisma.handover.count({ where: { status: 'ACCEPTED' } }),
+      this.prisma.handover.count({ where: { status: 'CANCELLED' } }),
+      this.prisma.handover.count({ where: { pdfUrl: { not: null } } })
+    ]);
+
+    return {
+      total,
+      draft,
+      sentToOwner,
+      accepted,
+      cancelled,
+      withPdf,
+      pendingAction: sentToOwner // Alias for frontend compatibility
+    };
+  }
+
   // List handovers
   async list(filters: HandoverFiltersDto, user: User): Promise<any> {
     return this.handoverRepo.findMany(filters, user);
