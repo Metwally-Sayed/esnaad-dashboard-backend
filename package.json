@@ -7,7 +7,7 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "start": "node -r ./tsconfig-paths-bootstrap.js dist/server.js",
-    "vercel-build": "npm run build && npm run prisma:generate",
+    "vercel-build": "npm run prisma:generate && npm run build",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:migrate:deploy": "prisma migrate deploy",
