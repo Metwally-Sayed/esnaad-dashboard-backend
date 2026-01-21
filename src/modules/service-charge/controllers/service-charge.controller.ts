@@ -208,6 +208,49 @@ export class ServiceChargeController {
     }
   };
 
+  /**
+   * GET /api/admin/projects/:projectId/units
+   * Get units for a project (for service charge creation)
+   */
+  getUnitsForProject = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> => {
+    try {
+      const result = await this.service.getUnitsForProject(
+        req.params.projectId,
+        req.user!
+      );
+      res.json({
+        success: true,
+        data: result,
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /**
+   * GET /api/admin/units/all
+   * Get all units from all projects (for service charge creation)
+   */
+  getAllUnitsForServiceCharge = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> => {
+    try {
+      const result = await this.service.getAllUnitsForServiceCharge(req.user!);
+      res.json({
+        success: true,
+        data: result,
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
   // ============================================
   // OWNER ENDPOINTS
   // ============================================

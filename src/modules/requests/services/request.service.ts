@@ -6,6 +6,8 @@ import { PrismaClient } from '@prisma/client';
 import { DocumentService } from '@/modules/docs/services/document.service';
 import { AuditService } from '@/modules/audit-logs/services/audit.service';
 import { EmailService } from '@/common/services/email.service';
+import { NotificationService } from '@/modules/notifications/services/notification.service';
+import { NotificationRepository } from '@/modules/notifications/repositories/notification.repository';
 
 // Minimal user type for request operations - needs id, role, email for PDF generation
 type RequestUser = Pick<User, 'id' | 'role' | 'email'> & { name?: string | null };
@@ -15,12 +17,15 @@ export class RequestService {
   private documentService: DocumentService;
   private auditService: AuditService;
   private emailService: EmailService;
+  private notificationService: NotificationService;
 
   constructor(private prisma: PrismaClient) {
     this.requestRepo = new RequestRepository(prisma);
     this.documentService = new DocumentService(prisma);
     this.auditService = new AuditService(prisma);
     this.emailService = new EmailService();
+    const notificationRepo = new NotificationRepository();
+    this.notificationService = new NotificationService(notificationRepo);
   }
 
   // Helper: Check if request is expired
@@ -138,6 +143,29 @@ export class RequestService {
         changes: { created: request }
       });
 
+      // NEW: Notify all admins about new request
+      const admins = await this.prisma.user.findMany({
+        where: { role: 'ADMIN' },
+        select: { id: true }
+      });
+
+      for (const admin of admins) {
+        await this.notificationService.createNotification({
+          userId: admin.id,
+          type: 'REQUEST_CREATED',
+          title: 'New Ownership Transfer Request',
+          message: `${user.name || user.email} has submitted a new ownership transfer request for ${data.transferUnitIds.length} unit(s)`,
+          entityType: 'request',
+          entityId: request.id,
+          actionUrl: `/requests/${request.id}`,
+          metadata: {
+            requestType: 'OWNERSHIP_TRANSFER',
+            ownerName: user.name || user.email,
+            unitCount: data.transferUnitIds.length,
+          },
+        });
+      }
+
       return request;
     }
 
@@ -183,6 +211,30 @@ export class RequestService {
         changes: { created: request }
       });
 
+      // NEW: Notify all admins about new tenant registration request
+      const admins = await this.prisma.user.findMany({
+        where: { role: 'ADMIN' },
+        select: { id: true }
+      });
+
+      for (const admin of admins) {
+        await this.notificationService.createNotification({
+          userId: admin.id,
+          type: 'REQUEST_CREATED',
+          title: 'New Tenant Registration Request',
+          message: `${user.name || user.email} has submitted a tenant registration request for unit ${unit.unitNumber}`,
+          entityType: 'request',
+          entityId: request.id,
+          actionUrl: `/requests/${request.id}`,
+          metadata: {
+            requestType: 'TENANT_REGISTRATION',
+            ownerName: user.name || user.email,
+            unitNumber: unit.unitNumber,
+            tenantName: data.tenantName,
+          },
+        });
+      }
+
       return request;
     }
 
@@ -226,6 +278,30 @@ export class RequestService {
         changes: { created: request }
       });
 
+      // NEW: Notify all admins about new unit modifications request
+      const admins = await this.prisma.user.findMany({
+        where: { role: 'ADMIN' },
+        select: { id: true }
+      });
+
+      for (const admin of admins) {
+        await this.notificationService.createNotification({
+          userId: admin.id,
+          type: 'REQUEST_CREATED',
+          title: 'New Unit Modification Request',
+          message: `${user.name || user.email} has submitted a modification request for unit ${unit.unitNumber}`,
+          entityType: 'request',
+          entityId: request.id,
+          actionUrl: `/requests/${request.id}`,
+          metadata: {
+            requestType: 'UNIT_MODIFICATIONS',
+            ownerName: user.name || user.email,
+            unitNumber: unit.unitNumber,
+            modificationType: data.modificationType,
+          },
+        });
+      }
+
       return request;
     }
 
@@ -268,6 +344,31 @@ export class RequestService {
       unitId: data.unitId,
       changes: { created: request }
     });
+
+    // NEW: Notify all admins about new request
+    const admins = await this.prisma.user.findMany({
+      where: { role: 'ADMIN' },
+      select: { id: true }
+    });
+
+    const requestTypeLabel = data.type === 'GUEST_VISIT' ? 'Guest Visit' : 'Work Permission';
+
+    for (const admin of admins) {
+      await this.notificationService.createNotification({
+        userId: admin.id,
+        type: 'REQUEST_CREATED',
+        title: `New ${requestTypeLabel} Request`,
+        message: `${user.name || user.email} has submitted a ${requestTypeLabel.toLowerCase()} request for unit ${unit.unitNumber}`,
+        entityType: 'request',
+        entityId: request.id,
+        actionUrl: `/requests/${request.id}`,
+        metadata: {
+          requestType: data.type,
+          ownerName: user.name || user.email,
+          unitNumber: unit.unitNumber,
+        },
+      });
+    }
 
     return request;
   }
@@ -355,6 +456,29 @@ export class RequestService {
       changes: { before: request, after: finalRequest }
     });
 
+    // NEW: Notify owner that request was approved
+    const unit = await this.prisma.unit.findUnique({
+      where: { id: request.unitId },
+      select: { unitNumber: true }
+    });
+
+    const requestTypeLabel = request.type === 'GUEST_VISIT' ? 'Guest Visit' : 'Work Permission';
+
+    await this.notificationService.createNotification({
+      userId: request.ownerId,
+      type: 'REQUEST_APPROVED',
+      title: `${requestTypeLabel} Approved`,
+      message: `Your ${requestTypeLabel.toLowerCase()} request for unit ${unit?.unitNumber || 'N/A'} has been approved`,
+      entityType: 'request',
+      entityId: id,
+      actionUrl: `/requests/${id}`,
+      metadata: {
+        requestId: id,
+        requestType: request.type,
+        pdfUrl: finalRequest.pdfUrl,
+      },
+    });
+
     return finalRequest;
   }
 
@@ -409,6 +533,20 @@ export class RequestService {
       console.error('❌ Failed to send approval notification email:', emailError.message);
       // Don't throw - email failure shouldn't break the approval
     }
+
+    // Notify owner that request was approved
+    await this.notificationService.createNotification({
+      userId: request.ownerId,
+      type: 'REQUEST_APPROVED',
+      title: 'Ownership Transfer Approved',
+      message: `Your ownership transfer request has been approved`,
+      entityType: 'request',
+      entityId: request.id,
+      actionUrl: `/requests/${request.id}`,
+      metadata: {
+        requestId: request.id,
+      },
+    });
 
     return updated;
   }
@@ -492,6 +630,27 @@ export class RequestService {
       // Don't throw - email failure shouldn't break the approval
     }
 
+    // NEW: Notify owner that request was approved
+    const unit = await this.prisma.unit.findUnique({
+      where: { id: request.unitId },
+      select: { unitNumber: true }
+    });
+
+    await this.notificationService.createNotification({
+      userId: request.ownerId,
+      type: 'REQUEST_APPROVED',
+      title: 'Tenant Registration Approved',
+      message: `Your tenant registration request for unit ${unit?.unitNumber || 'N/A'} has been approved`,
+      entityType: 'request',
+      entityId: request.id,
+      actionUrl: `/requests/${request.id}`,
+      metadata: {
+        requestId: request.id,
+        tenantName: request.tenantName,
+        pdfUrl,
+      },
+    });
+
     return updated;
   }
 
@@ -549,6 +708,30 @@ export class RequestService {
       // Don't throw - email failure shouldn't break the approval
     }
 
+    // NEW: Notify owner that request was approved
+    const unit = await this.prisma.unit.findUnique({
+      where: { id: request.unitId },
+      select: { unitNumber: true }
+    });
+
+    const modificationTypeDisplay = request.modificationType === 'OTHER'
+      ? request.modificationTypeOther
+      : request.modificationType?.replace(/_/g, ' ');
+
+    await this.notificationService.createNotification({
+      userId: request.ownerId,
+      type: 'REQUEST_APPROVED',
+      title: 'Unit Modification Approved',
+      message: `Your unit modification request (${modificationTypeDisplay}) for unit ${unit?.unitNumber || 'N/A'} has been approved`,
+      entityType: 'request',
+      entityId: request.id,
+      actionUrl: `/requests/${request.id}`,
+      metadata: {
+        requestId: request.id,
+        modificationType: request.modificationType,
+      },
+    });
+
     return updated;
   }
 
@@ -583,6 +766,21 @@ export class RequestService {
       actorId: user.id,
       unitId: request.unitId,
       changes: { before: request, after: updated }
+    });
+
+    // Notify owner that request was rejected
+    await this.notificationService.createNotification({
+      userId: request.ownerId,
+      type: 'REQUEST_REJECTED',
+      title: 'Ownership Transfer Rejected',
+      message: `Your ownership transfer request has been rejected: ${data.reason}`,
+      entityType: 'request',
+      entityId: request.id,
+      actionUrl: `/requests/${request.id}`,
+      metadata: {
+        requestId: request.id,
+        rejectionReason: data.reason,
+      },
     });
 
     return updated;

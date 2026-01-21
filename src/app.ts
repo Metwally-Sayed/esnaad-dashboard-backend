@@ -22,6 +22,7 @@ import unitNestedDocumentsRoutes from './modules/unit-documents/routes/unit-nest
 import { createRequestRoutes } from './modules/requests/routes/request.routes';
 import { createOwnerVerificationRoutes } from './modules/owner-verification/routes/owner-verification.routes';
 import serviceChargeRoutes from './modules/service-charge/routes/service-charge.routes';
+import notificationRoutes from './modules/notifications/routes/notification.routes';
 import { prisma } from './config/database';
 
 export const createApp = (): Application => {
@@ -90,6 +91,7 @@ export const createApp = (): Application => {
   app.use('/api/requests', createRequestRoutes());
   app.use('/api/owner-verification', createOwnerVerificationRoutes());
   app.use('/api', serviceChargeRoutes);
+  app.use('/api/notifications', notificationRoutes);
 
   // 404 handler
   app.use(notFoundHandler);

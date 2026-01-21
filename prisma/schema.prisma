@@ -188,6 +188,7 @@ model User {
   reviewedDocuments        OwnerDocument[]          @relation("DocumentReviewer")
   createdServiceCharges    ProjectServiceCharge[]   @relation("ServiceChargeCreator")
   overriddenServiceCharges UnitServiceCharge[]      @relation("ServiceChargeOverrider")
+  notifications            Notification[]           @relation("UserNotifications")
 
   @@index([email])
   @@index([role])
@@ -615,6 +616,31 @@ enum ServiceChargePeriodType {
   QUARTERLY
 }
 
+enum NotificationType {
+  // Handover notifications
+  HANDOVER_SENT_TO_OWNER
+  HANDOVER_ACCEPTED
+  HANDOVER_MESSAGE_CREATED
+
+  // Request notifications
+  REQUEST_CREATED
+  REQUEST_APPROVED
+  REQUEST_REJECTED
+  REQUEST_MESSAGE_CREATED
+
+  // Owner verification notifications
+  OWNER_VERIFICATION_APPROVED
+  OWNER_VERIFICATION_REJECTED
+
+  // Snagging notifications
+  SNAGGING_SENT_TO_OWNER
+  SNAGGING_ACCEPTED
+  SNAGGING_CANCELLED
+
+  // Service charge notifications
+  SERVICE_CHARGE_CREATED
+}
+
 // Requests / Invitations model
 model Request {
   id      String        @id @default(cuid())
@@ -722,7 +748,7 @@ model ProjectServiceCharge {
   year            Int                     // e.g., 2024
   quarter         Int?                    // 1-4 for quarterly, null for yearly
   periodType      ServiceChargePeriodType
-  percentage      Decimal                 @db.Decimal(5, 2)  // e.g., 5.00 = 5%
+  percentage      Decimal?                @db.Decimal(5, 2)  // Nullable for per-unit charges
   dueDate         DateTime?
   createdAt       DateTime                @default(now())
   updatedAt       DateTime                @updatedAt
@@ -770,4 +796,35 @@ model UnitServiceCharge {
   @@index([unitId])
   @@index([projectServiceChargeId])
   @@map("unit_service_charges")
+}
+
+// Notifications model
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String   // Recipient
+  type      NotificationType
+  title     String   // "Handover Accepted"
+  message   String   @db.Text // "Unit A-101 handover has been accepted by the owner"
+
+  // Entity reference (polymorphic)
+  entityType String? // "handover", "request", "snagging", etc.
+  entityId   String? // ID of the related entity
+
+  // Metadata
+  actionUrl  String? // "/handovers/xyz" - where to navigate on click
+  metadata   Json?   // Additional data like unit number, project name
+
+  // Read status
+  isRead     Boolean  @default(false)
+  readAt     DateTime?
+
+  createdAt  DateTime @default(now())
+
+  // Relations
+  user User @relation("UserNotifications", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead, createdAt])
+  @@index([userId, createdAt])
+  @@index([entityType, entityId])
+  @@map("notifications")
 }

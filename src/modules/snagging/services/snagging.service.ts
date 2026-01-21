@@ -5,6 +5,8 @@ import { prisma } from '../../../config/database';
 import { DocumentService } from '@/modules/docs/services/document.service';
 import { CloudinaryUploadService } from '@/modules/uploads/services/cloudinary-upload.service';
 import { AuditService } from '@/modules/audit-logs/services/audit.service';
+import { NotificationService } from '@/modules/notifications/services/notification.service';
+import { NotificationRepository } from '@/modules/notifications/repositories/notification.repository';
 import { CreateSnaggingDto, UpdateSnaggingDto, ScheduleAppointmentDto, SnaggingFiltersDto } from '../dto/snagging.dto';
 import { createPaginatedResponse } from '../../../common/utils/pagination';
 
@@ -16,12 +18,15 @@ export class SnaggingService {
   private documentService: DocumentService;
   private cloudinaryService: CloudinaryUploadService;
   private auditService: AuditService;
+  private notificationService: NotificationService;
 
   constructor() {
     this.snaggingRepo = new SnaggingRepository();
     this.documentService = new DocumentService(prisma);
     this.cloudinaryService = new CloudinaryUploadService();
     this.auditService = new AuditService(prisma);
+    const notificationRepo = new NotificationRepository();
+    this.notificationService = new NotificationService(notificationRepo);
   }
 
   // ✅ STRICT ACCESS CONTROL - Core RBAC method
@@ -282,6 +287,20 @@ export class SnaggingService {
       changes: { status: { from: 'DRAFT', to: 'SENT_TO_OWNER' } }
     });
 
+    // Notify owner that snagging was sent
+    await this.notificationService.createNotification({
+      userId: updated.ownerId,
+      type: 'SNAGGING_SENT_TO_OWNER',
+      title: 'New Snagging Report',
+      message: `A snagging report for Unit ${updated.unit.unitNumber} is ready for your review`,
+      entityType: 'snagging',
+      entityId: updated.id,
+      actionUrl: `/snaggings/${updated.id}`,
+      metadata: {
+        unitNumber: updated.unit.unitNumber,
+      },
+    });
+
     return updated;
   }
 
@@ -321,6 +340,28 @@ export class SnaggingService {
       unitId: snagging.unitId,
       changes: { status: { from: snagging.status, to: 'CANCELLED' } }
     });
+
+    // NEW: Notify owner if snagging was sent to them
+    if (snagging.status === 'SENT_TO_OWNER') {
+      const unit = await prisma.unit.findUnique({
+        where: { id: snagging.unitId },
+        select: { unitNumber: true }
+      });
+
+      await this.notificationService.createNotification({
+        userId: snagging.ownerId,
+        type: 'SNAGGING_CANCELLED',
+        title: 'Snagging Report Cancelled',
+        message: `The snagging report for unit ${unit?.unitNumber || 'N/A'} has been cancelled`,
+        entityType: 'snagging',
+        entityId: snagging.id,
+        actionUrl: `/snaggings/${snagging.id}`,
+        metadata: {
+          unitNumber: unit?.unitNumber,
+          previousStatus: snagging.status,
+        },
+      });
+    }
 
     return updated;
   }
@@ -458,6 +499,20 @@ export class SnaggingService {
       actorId: user.id,
       unitId: snagging.unitId,
       changes: { pdfUrl: uploadResult.publicUrl }
+    });
+
+    // Notify admin that owner accepted snagging
+    await this.notificationService.createNotification({
+      userId: updated.createdByAdmin.id,
+      type: 'SNAGGING_ACCEPTED',
+      title: 'Snagging Accepted',
+      message: `Owner has accepted the snagging report for Unit ${updated.unit.unitNumber}`,
+      entityType: 'snagging',
+      entityId: updated.id,
+      actionUrl: `/snaggings/${updated.id}`,
+      metadata: {
+        unitNumber: updated.unit.unitNumber,
+      },
     });
 
     return updated;

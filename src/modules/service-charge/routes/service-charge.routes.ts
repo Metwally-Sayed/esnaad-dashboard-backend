@@ -14,6 +14,7 @@ import {
   generatePdfStatementSchema,
   getOwnerServiceChargesSchema,
   downloadPdfStatementSchema,
+  getUnitsForProjectSchema,
 } from '../dto/service-charge.dto';
 
 const router = Router();
@@ -87,6 +88,23 @@ router.post(
   requireRole(Role.ADMIN),
   validate(generatePdfStatementSchema),
   controller.generatePdfStatement
+);
+
+// Get units for project (for service charge creation)
+router.get(
+  '/admin/projects/:projectId/units',
+  requireAuth,
+  requireRole(Role.ADMIN),
+  validate(getUnitsForProjectSchema),
+  controller.getUnitsForProject
+);
+
+// Get all units from all projects (for service charge creation)
+router.get(
+  '/admin/units/all',
+  requireAuth,
+  requireRole(Role.ADMIN),
+  controller.getAllUnitsForServiceCharge
 );
 
 // ============================================

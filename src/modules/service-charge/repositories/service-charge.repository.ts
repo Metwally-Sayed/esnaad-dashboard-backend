@@ -32,6 +32,29 @@ export class ServiceChargeRepository {
             name: true,
           },
         },
+        unitCharges: {
+          select: {
+            id: true,
+            unitId: true,
+            amount: true,
+            isOverridden: true,
+            overriddenAmount: true,
+            unit: {
+              select: {
+                id: true,
+                unitNumber: true,
+                buildingName: true,
+                owner: {
+                  select: {
+                    id: true,
+                    email: true,
+                    name: true,
+                  },
+                },
+              },
+            },
+          },
+        },
         _count: {
           select: {
             unitCharges: true,
@@ -358,6 +381,131 @@ export class ServiceChargeRepository {
       orderBy: {
         unitNumber: 'asc',
       },
+    });
+  }
+
+  /**
+   * Get all units for a project (for service charge selection)
+   */
+  async getUnitsForProject(projectId: string): Promise<
+    Array<{
+      id: string;
+      unitNumber: string;
+      buildingName: string | null;
+      floor: number | null;
+      area: number | null;
+      price: any; // Decimal type from Prisma
+      owner: {
+        id: string;
+        email: string;
+        name: string | null;
+      } | null;
+    }>
+  > {
+    return prisma.unit.findMany({
+      where: {
+        projectId,
+      },
+      select: {
+        id: true,
+        unitNumber: true,
+        buildingName: true,
+        floor: true,
+        area: true,
+        price: true,
+        owner: {
+          select: {
+            id: true,
+            email: true,
+            name: true,
+          },
+        },
+      },
+      orderBy: {
+        unitNumber: 'asc',
+      },
+    });
+  }
+
+  /**
+   * Validate that all units belong to a specific project
+   * Returns the count of units that belong to the project
+   */
+  async validateUnitsForProject(projectId: string, unitIds: string[]): Promise<number> {
+    const count = await prisma.unit.count({
+      where: {
+        id: {
+          in: unitIds,
+        },
+        projectId,
+      },
+    });
+    return count;
+  }
+
+  /**
+   * Get all units from all projects (for service charge creation)
+   */
+  async getAllUnitsForServiceCharge(): Promise<
+    Array<{
+      id: string;
+      unitNumber: string;
+      buildingName: string | null;
+      floor: number | null;
+      area: number | null;
+      price: any;
+      projectId: string | null;
+      project: {
+        id: string;
+        name: string;
+        location: string | null;
+      } | null;
+      owner: {
+        id: string;
+        email: string;
+        name: string | null;
+      } | null;
+    }>
+  > {
+    return prisma.unit.findMany({
+      where: {
+        projectId: {
+          not: null,
+        },
+      },
+      select: {
+        id: true,
+        unitNumber: true,
+        buildingName: true,
+        floor: true,
+        area: true,
+        price: true,
+        projectId: true,
+        project: {
+          select: {
+            id: true,
+            name: true,
+            location: true,
+          },
+        },
+        owner: {
+          select: {
+            id: true,
+            email: true,
+            name: true,
+          },
+        },
+      },
+      orderBy: [
+        {
+          project: {
+            name: 'asc',
+          },
+        },
+        {
+          unitNumber: 'asc',
+        },
+      ],
     });
   }
 }

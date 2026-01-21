@@ -10,6 +10,8 @@ import {
 import { ForbiddenError, NotFoundError, ValidationError } from '@/common/errors/AppError';
 import { PrismaClient } from '@prisma/client';
 import { AuditService } from '@/modules/audit-logs/services/audit.service';
+import { NotificationService } from '@/modules/notifications/services/notification.service';
+import { NotificationRepository } from '@/modules/notifications/repositories/notification.repository';
 
 // Minimal user type for verification operations
 type VerificationUser = Pick<User, 'id' | 'role'> & { name?: string | null; email?: string | null };
@@ -17,10 +19,13 @@ type VerificationUser = Pick<User, 'id' | 'role'> & { name?: string | null; emai
 export class OwnerVerificationService {
   private verificationRepo: OwnerVerificationRepository;
   private auditService: AuditService;
+  private notificationService: NotificationService;
 
   constructor(private prisma: PrismaClient) {
     this.verificationRepo = new OwnerVerificationRepository(prisma);
     this.auditService = new AuditService(prisma);
+    const notificationRepo = new NotificationRepository();
+    this.notificationService = new NotificationService(notificationRepo);
   }
 
   // ===== Owner Methods =====
@@ -259,6 +264,17 @@ export class OwnerVerificationService {
       }
     });
 
+    // Notify owner that verification was approved
+    await this.notificationService.createNotification({
+      userId: userId,
+      type: 'OWNER_VERIFICATION_APPROVED',
+      title: 'Verification Approved',
+      message: 'Your ownership verification has been approved',
+      entityType: 'user',
+      entityId: userId,
+      actionUrl: '/owner-verification',
+    });
+
     return {
       verificationStatus: updatedUser.verificationStatus,
       message: 'User verification approved successfully'
@@ -313,6 +329,20 @@ export class OwnerVerificationService {
         before: { verificationStatus: userData.verificationStatus },
         after: { verificationStatus: 'REJECTED', reason: data.reason }
       }
+    });
+
+    // Notify owner that verification was rejected
+    await this.notificationService.createNotification({
+      userId: userId,
+      type: 'OWNER_VERIFICATION_REJECTED',
+      title: 'Verification Rejected',
+      message: `Your verification was rejected: ${data.reason}`,
+      entityType: 'user',
+      entityId: userId,
+      actionUrl: '/owner-verification',
+      metadata: {
+        reason: data.reason,
+      },
     });
 
     return {

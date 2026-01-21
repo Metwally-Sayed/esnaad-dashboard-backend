@@ -17,12 +17,17 @@ import {
 } from '../dto/service-charge.dto';
 import { prisma } from '../../../config/database';
 import { Decimal } from '@prisma/client/runtime/library';
+import { NotificationService } from '@/modules/notifications/services/notification.service';
+import { NotificationRepository } from '@/modules/notifications/repositories/notification.repository';
 
 export class ServiceChargeService {
   private repo: ServiceChargeRepository;
+  private notificationService: NotificationService;
 
   constructor() {
     this.repo = new ServiceChargeRepository();
+    const notificationRepo = new NotificationRepository();
+    this.notificationService = new NotificationService(notificationRepo);
   }
 
   /**
@@ -111,12 +116,42 @@ export class ServiceChargeService {
       );
     }
 
+    // Determine if using percentage-based or per-unit charges
+    const isPerUnitCharge = data.unitCharges && data.unitCharges.length > 0;
+    let unitChargesData: Array<{ unitId: string; projectServiceChargeId: string; amount: Decimal }> = [];
+    let totalAmount = new Decimal(0);
+
+    if (isPerUnitCharge) {
+      // Per-unit charge method: validate units belong to project
+      const unitIds = data.unitCharges!.map((uc) => uc.unitId);
+      const validCount = await this.repo.validateUnitsForProject(data.projectId, unitIds);
+
+      if (validCount !== unitIds.length) {
+        throw new ConflictError(
+          `Some units do not belong to this project. Expected ${unitIds.length} but found ${validCount}`
+        );
+      }
+
+      // Prepare unit charges data with explicit amounts
+      unitChargesData = data.unitCharges!.map((uc) => ({
+        unitId: uc.unitId,
+        projectServiceChargeId: '', // Will be filled after creating service charge
+        amount: new Decimal(uc.amount),
+      }));
+
+      // Calculate total for audit log
+      totalAmount = unitChargesData.reduce(
+        (sum, uc) => sum.add(uc.amount),
+        new Decimal(0)
+      );
+    }
+
     // Create the project service charge
     const serviceCharge = await this.repo.createProjectServiceCharge({
       year: data.year,
       quarter: data.periodType === 'QUARTERLY' ? data.quarter! : null,
       periodType: data.periodType,
-      percentage: new Decimal(data.percentage),
+      percentage: data.percentage ? new Decimal(data.percentage) : null,
       dueDate: data.dueDate ? new Date(data.dueDate) : null,
       project: {
         connect: { id: data.projectId },
@@ -126,60 +161,101 @@ export class ServiceChargeService {
       },
     });
 
-    // Get units with prices for this project
-    const units = await this.repo.getUnitsWithPricesForProject(data.projectId);
+    if (isPerUnitCharge) {
+      // Create unit charges with explicit amounts
+      unitChargesData.forEach((uc) => {
+        uc.projectServiceChargeId = serviceCharge.id;
+      });
 
-    // Debug logging
-    console.log(`[Service Charge Debug] Project ID: ${data.projectId}`);
-    console.log(`[Service Charge Debug] Found ${units.length} units with prices`);
-    if (units.length > 0) {
-      console.log(`[Service Charge Debug] Sample unit:`, {
-        id: units[0].id,
-        unitNumber: units[0].unitNumber,
-        price: units[0].price?.toString(),
-        projectId: data.projectId
+      if (unitChargesData.length > 0) {
+        await this.repo.bulkCreateUnitServiceCharges(unitChargesData);
+        console.log(`[Service Charge] Created ${unitChargesData.length} unit charges with total amount: ${totalAmount.toString()}`);
+      }
+
+      // Audit log for per-unit charges
+      await this.createAuditLog({
+        action: AuditAction.SERVICE_CHARGE_CREATED,
+        entityType: 'project_service_charge',
+        entityId: serviceCharge.id,
+        actorId: requestingUser.id,
+        changes: {
+          created: data,
+          chargeType: 'per-unit',
+          unitsAffected: unitChargesData.length,
+          totalAmount: totalAmount.toString(),
+        },
       });
     } else {
-      console.log(`[Service Charge Debug] No units found. Checking all units in project...`);
-      const allUnitsInProject = await prisma.unit.findMany({
-        where: { projectId: data.projectId },
-        select: { id: true, unitNumber: true, price: true, projectId: true }
+      // Percentage-based method (legacy): calculate from unit prices
+      const units = await this.repo.getUnitsWithPricesForProject(data.projectId);
+
+      console.log(`[Service Charge] Project ID: ${data.projectId}`);
+      console.log(`[Service Charge] Found ${units.length} units with prices`);
+
+      // Calculate and create unit service charges
+      unitChargesData = units.map((unit) => {
+        const unitPrice = new Decimal(unit.price.toString());
+        const percentage = new Decimal(data.percentage!);
+        const calculatedAmount = unitPrice.mul(percentage).div(100);
+
+        return {
+          unitId: unit.id,
+          projectServiceChargeId: serviceCharge.id,
+          amount: calculatedAmount,
+        };
       });
-      console.log(`[Service Charge Debug] Total units in project: ${allUnitsInProject.length}`);
-      console.log(`[Service Charge Debug] Units without prices: ${allUnitsInProject.filter(u => !u.price).length}`);
-      if (allUnitsInProject.length > 0) {
-        console.log(`[Service Charge Debug] Sample unit from project:`, allUnitsInProject[0]);
+
+      if (unitChargesData.length > 0) {
+        await this.repo.bulkCreateUnitServiceCharges(unitChargesData);
+        console.log(`[Service Charge] Created ${unitChargesData.length} unit charges`);
+      } else {
+        console.log(`[Service Charge] No unit charges created - no units with prices found`);
+      }
+
+      // Audit log for percentage-based charges
+      await this.createAuditLog({
+        action: AuditAction.SERVICE_CHARGE_CREATED,
+        entityType: 'project_service_charge',
+        entityId: serviceCharge.id,
+        actorId: requestingUser.id,
+        changes: {
+          created: data,
+          chargeType: 'percentage',
+          unitsAffected: units.length,
+        },
+      });
+    }
+
+    // Notify each affected owner that service charge was created
+    const affectedOwners = new Set<string>();
+
+    // Get unique owner IDs from unit charges
+    for (const unitCharge of unitChargesData) {
+      const unit = await prisma.unit.findUnique({
+        where: { id: unitCharge.unitId },
+        select: { ownerId: true },
+      });
+
+      if (unit?.ownerId && !affectedOwners.has(unit.ownerId)) {
+        affectedOwners.add(unit.ownerId);
+
+        // Create notification for each unique owner
+        await this.notificationService.createNotification({
+          userId: unit.ownerId,
+          type: 'SERVICE_CHARGE_CREATED',
+          title: 'New Service Charge',
+          message: `A new service charge has been created for ${data.periodType === 'YEARLY' ? `year ${data.year}` : `Q${data.quarter} ${data.year}`}`,
+          entityType: 'service_charge',
+          entityId: serviceCharge.id,
+          actionUrl: '/service-charge',
+          metadata: {
+            year: data.year,
+            quarter: data.quarter,
+            periodType: data.periodType,
+          },
+        });
       }
     }
-
-    // Calculate and create unit service charges
-    const unitChargesData = units.map((unit) => {
-      const unitPrice = new Decimal(unit.price.toString());
-      const percentage = new Decimal(data.percentage);
-      const calculatedAmount = unitPrice.mul(percentage).div(100);
-
-      return {
-        unitId: unit.id,
-        projectServiceChargeId: serviceCharge.id,
-        amount: calculatedAmount,
-      };
-    });
-
-    if (unitChargesData.length > 0) {
-      await this.repo.bulkCreateUnitServiceCharges(unitChargesData);
-      console.log(`[Service Charge Debug] Created ${unitChargesData.length} unit charges`);
-    } else {
-      console.log(`[Service Charge Debug] No unit charges created - no units with prices found`);
-    }
-
-    // Audit log
-    await this.createAuditLog({
-      action: AuditAction.SERVICE_CHARGE_CREATED,
-      entityType: 'project_service_charge',
-      entityId: serviceCharge.id,
-      actorId: requestingUser.id,
-      changes: { created: data, unitsAffected: units.length },
-    });
 
     return serviceCharge;
   }
@@ -407,6 +483,45 @@ export class ServiceChargeService {
     }
 
     return { url: unitCharge.pdfUrl };
+  }
+
+  /**
+   * Get units for a project (for service charge creation)
+   */
+  async getUnitsForProject(
+    projectId: string,
+    requestingUser: { id: string; role: Role }
+  ): Promise<any[]> {
+    if (requestingUser.role !== Role.ADMIN) {
+      throw new ForbiddenError('Only administrators can access this endpoint');
+    }
+
+    // Verify project exists
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      select: { id: true, name: true },
+    });
+
+    if (!project) {
+      throw new NotFoundError('Project not found');
+    }
+
+    const units = await this.repo.getUnitsForProject(projectId);
+    return units;
+  }
+
+  /**
+   * Get all units from all projects (for service charge creation)
+   */
+  async getAllUnitsForServiceCharge(
+    requestingUser: { id: string; role: Role }
+  ): Promise<any[]> {
+    if (requestingUser.role !== Role.ADMIN) {
+      throw new ForbiddenError('Only administrators can access this endpoint');
+    }
+
+    const units = await this.repo.getAllUnitsForServiceCharge();
+    return units;
   }
 
   /**

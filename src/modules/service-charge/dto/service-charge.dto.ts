@@ -31,7 +31,12 @@ export const createProjectServiceChargeSchema = z.object({
     year: z.number().int().min(2020).max(2100),
     quarter: z.number().int().min(1).max(4).optional(),
     periodType: ServiceChargePeriodTypeSchema,
-    percentage: z.number().positive().max(100, 'Percentage cannot exceed 100%'),
+    // Either percentage (old method) or unitCharges (new per-unit method)
+    percentage: z.number().positive().max(100, 'Percentage cannot exceed 100%').optional(),
+    unitCharges: z.array(z.object({
+      unitId: z.string().min(1),
+      amount: z.number().positive(),
+    })).min(1, 'At least one unit required').optional(),
     dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format').optional(),
   }).refine((data) => {
     // If periodType is QUARTERLY, quarter is required
@@ -45,6 +50,13 @@ export const createProjectServiceChargeSchema = z.object({
     return true;
   }, {
     message: 'Quarter is required for QUARTERLY period type and should not be provided for YEARLY',
+  }).refine((data) => {
+    // Must provide either percentage or unitCharges, but not both
+    const hasPercentage = data.percentage !== undefined;
+    const hasUnitCharges = data.unitCharges !== undefined && data.unitCharges.length > 0;
+    return (hasPercentage && !hasUnitCharges) || (!hasPercentage && hasUnitCharges);
+  }, {
+    message: 'Must provide either percentage or unitCharges, but not both',
   }),
 });
 
@@ -108,6 +120,13 @@ export const getOwnerServiceChargesSchema = z.object({
 export const downloadPdfStatementSchema = z.object({
   params: z.object({
     id: z.string().min(1), // unit service charge ID
+  }),
+});
+
+// Get units for project (for creating service charge)
+export const getUnitsForProjectSchema = z.object({
+  params: z.object({
+    projectId: z.string().min(1),
   }),
 });
 

@@ -5,6 +5,8 @@ import { UnauthorizedError, ForbiddenError, NotFoundError, ValidationError } fro
 import { PrismaClient } from '@prisma/client';
 import { DocumentService } from '@/modules/docs/services/document.service';
 import { AuditService } from '@/modules/audit-logs/services/audit.service';
+import { NotificationService } from '@/modules/notifications/services/notification.service';
+import { NotificationRepository } from '@/modules/notifications/repositories/notification.repository';
 
 // State transition rules (SIMPLIFIED FLOW)
 const STATE_TRANSITIONS: Record<HandoverStatus, HandoverStatus[]> = {
@@ -27,11 +29,14 @@ export class HandoverService {
   private handoverRepo: HandoverRepository;
   private documentService: DocumentService;
   private auditService: AuditService;
+  private notificationService: NotificationService;
 
   constructor(private prisma: PrismaClient) {
     this.handoverRepo = new HandoverRepository(prisma);
     this.documentService = new DocumentService(prisma);
     this.auditService = new AuditService(prisma);
+    const notificationRepo = new NotificationRepository();
+    this.notificationService = new NotificationService(notificationRepo);
   }
 
   // Validate state transition
@@ -261,6 +266,20 @@ export class HandoverService {
       metadata: { message }
     });
 
+    // Notify owner that handover was sent
+    await this.notificationService.createNotification({
+      userId: handover.ownerId,
+      type: 'HANDOVER_SENT_TO_OWNER',
+      title: 'New Handover Available',
+      message: `A handover for Unit ${handover.unit.unitNumber} is ready for your review`,
+      entityType: 'handover',
+      entityId: handover.id,
+      actionUrl: `/handovers/${handover.id}`,
+      metadata: {
+        unitNumber: handover.unit.unitNumber,
+      },
+    });
+
     return updated;
   }
 
@@ -321,6 +340,21 @@ export class HandoverService {
         pdfUrl: document.url,
         documentId: document.id
       }
+    });
+
+    // Notify admin (handover creator) that owner accepted
+    await this.notificationService.createNotification({
+      userId: handover.createdByAdminId,
+      type: 'HANDOVER_ACCEPTED',
+      title: 'Handover Accepted',
+      message: `Owner has accepted the handover for Unit ${handover.unit.unitNumber}`,
+      entityType: 'handover',
+      entityId: handover.id,
+      actionUrl: `/handovers/${handover.id}`,
+      metadata: {
+        unitNumber: handover.unit.unitNumber,
+        unitId: handover.unitId,
+      },
     });
 
     return {
@@ -532,6 +566,25 @@ export class HandoverService {
       actorId: user.id,
       unitId: handover.unitId,
       metadata: { handoverId: id }
+    });
+
+    // Notify the OTHER party (if admin posts, notify owner; if owner posts, notify admin)
+    const recipientUserId = user.role === 'ADMIN'
+      ? handover.ownerId
+      : handover.createdByAdminId;
+
+    await this.notificationService.createNotification({
+      userId: recipientUserId,
+      type: 'HANDOVER_MESSAGE_CREATED',
+      title: 'New Handover Message',
+      message: `${user.name || user.email} posted a message on handover for Unit ${handover.unit.unitNumber}`,
+      entityType: 'handover',
+      entityId: handover.id,
+      actionUrl: `/handovers/${handover.id}`,
+      metadata: {
+        messageId: message.id,
+        authorName: user.name || user.email,
+      },
     });
 
     return message;
