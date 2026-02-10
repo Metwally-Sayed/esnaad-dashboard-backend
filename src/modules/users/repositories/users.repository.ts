@@ -37,7 +37,7 @@ export class UsersRepository {
     return prisma.user.count({ where });
   }
 
-  async findById(id: string): Promise<UserWithoutPassword | null> {
+  async findById(id: string): Promise<any | null> {
     return prisma.user.findUnique({
       where: { id },
       select: {
@@ -54,6 +54,25 @@ export class UsersRepository {
         verificationNote: true,
         createdAt: true,
         updatedAt: true,
+        ownerDocuments: {
+          orderBy: { createdAt: 'desc' },
+          select: {
+            id: true,
+            type: true,
+            fileKey: true,
+            mimeType: true,
+            sizeBytes: true,
+            status: true,
+            rejectionReason: true,
+            reviewedAt: true,
+            createdAt: true,
+          },
+        },
+        _count: {
+          select: {
+            ownedUnits: true,
+          },
+        },
       },
     });
   }
