@@ -5,10 +5,11 @@
   "main": "dist/server.js",
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "build": "tsc",
+    "build": "tsc && cp -r src/modules/docs/templates dist/modules/docs/templates",
     "start": "node -r ./tsconfig-paths-bootstrap.js dist/server.js",
     "postinstall": "prisma generate",
     "vercel-build": "npm run prisma:generate && npm run build",
+    "copy-templates": "cp -r src/modules/docs/templates dist/modules/docs/templates",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:migrate:deploy": "prisma migrate deploy",
