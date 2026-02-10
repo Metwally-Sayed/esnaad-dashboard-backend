@@ -70,11 +70,14 @@ export class ServiceChargePdfService {
 
       // Financial details
       unitPrice: unitCharge.unit.price?.toString() || '0',
-      percentage: unitCharge.projectServiceCharge.percentage.toString(),
+      percentage: unitCharge.projectServiceCharge.percentage?.toString() || null,
+      hasPercentage: unitCharge.projectServiceCharge.percentage !== null,
       calculatedAmount: unitCharge.amount.toString(),
       isOverridden: unitCharge.isOverridden,
       overriddenAmount: unitCharge.overriddenAmount?.toString(),
       finalAmount: finalAmount?.toString() || '0',
+      paidAmount: unitCharge.paidAmount?.toString() || '0',
+      balance: (parseFloat(finalAmount?.toString() || '0') - parseFloat(unitCharge.paidAmount?.toString() || '0')).toFixed(2),
 
       // Due date
       dueDate: unitCharge.projectServiceCharge.dueDate

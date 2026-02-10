@@ -24,7 +24,7 @@ export const getProjectServiceChargeByIdSchema = z.object({
   }),
 });
 
-// Create project service charge
+// Create project service charge (legacy - multi-unit)
 export const createProjectServiceChargeSchema = z.object({
   body: z.object({
     projectId: z.string().min(1, 'Project ID is required'),
@@ -57,6 +57,36 @@ export const createProjectServiceChargeSchema = z.object({
     return (hasPercentage && !hasUnitCharges) || (!hasPercentage && hasUnitCharges);
   }, {
     message: 'Must provide either percentage or unitCharges, but not both',
+  }),
+});
+
+// Create simple unit service charge (single unit)
+export const createSimpleServiceChargeSchema = z.object({
+  body: z.object({
+    unitId: z.string().min(1, 'Unit ID is required'),
+    year: z.number().int().min(2020).max(2100),
+    quarter: z.number().int().min(1).max(4).optional(),
+    periodType: ServiceChargePeriodTypeSchema,
+    amount: z.number().positive('Amount must be positive'),
+    paidAmount: z.number().min(0, 'Paid amount cannot be negative').default(0),
+    dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be in YYYY-MM-DD format').optional(),
+  }).refine((data) => {
+    // If periodType is QUARTERLY, quarter is required
+    if (data.periodType === 'QUARTERLY' && !data.quarter) {
+      return false;
+    }
+    // If periodType is YEARLY, quarter should not be provided
+    if (data.periodType === 'YEARLY' && data.quarter) {
+      return false;
+    }
+    return true;
+  }, {
+    message: 'Quarter is required for QUARTERLY period type and should not be provided for YEARLY',
+  }).refine((data) => {
+    // Paid amount cannot exceed total amount
+    return data.paidAmount <= data.amount;
+  }, {
+    message: 'Paid amount cannot exceed total amount',
   }),
 });
 
@@ -96,6 +126,15 @@ export const overrideUnitServiceChargeSchema = z.object({
   }),
   body: z.object({
     overriddenAmount: z.number().positive(),
+    paidAmount: z.number().min(0).optional(),
+  }).refine((data) => {
+    // If paidAmount is provided, it cannot exceed overriddenAmount
+    if (data.paidAmount !== undefined && data.paidAmount > data.overriddenAmount) {
+      return false;
+    }
+    return true;
+  }, {
+    message: 'Paid amount cannot exceed total amount',
   }),
 });
 
@@ -133,6 +172,7 @@ export const getUnitsForProjectSchema = z.object({
 // Type exports
 export type GetAllProjectServiceChargesQueryDto = z.infer<typeof getAllProjectServiceChargesSchema>['query'];
 export type CreateProjectServiceChargeDto = z.infer<typeof createProjectServiceChargeSchema>['body'];
+export type CreateSimpleServiceChargeDto = z.infer<typeof createSimpleServiceChargeSchema>['body'];
 export type UpdateProjectServiceChargeDto = z.infer<typeof updateProjectServiceChargeSchema>['body'];
 export type GetUnitServiceChargesQueryDto = z.infer<typeof getUnitServiceChargesSchema>['query'];
 export type OverrideUnitServiceChargeDto = z.infer<typeof overrideUnitServiceChargeSchema>['body'];

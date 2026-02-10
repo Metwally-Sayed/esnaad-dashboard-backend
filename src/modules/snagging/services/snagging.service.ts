@@ -7,7 +7,7 @@ import { CloudinaryUploadService } from '@/modules/uploads/services/cloudinary-u
 import { AuditService } from '@/modules/audit-logs/services/audit.service';
 import { NotificationService } from '@/modules/notifications/services/notification.service';
 import { NotificationRepository } from '@/modules/notifications/repositories/notification.repository';
-import { CreateSnaggingDto, UpdateSnaggingDto, ScheduleAppointmentDto, SnaggingFiltersDto } from '../dto/snagging.dto';
+import { CreateSnaggingDto, UpdateSnaggingDto, ScheduleAppointmentDto, SnaggingFiltersDto, UpdateSignatureDto } from '../dto/snagging.dto';
 import { createPaginatedResponse } from '../../../common/utils/pagination';
 
 // Type for authenticated user from JWT
@@ -262,7 +262,7 @@ export class SnaggingService {
     }
   }
 
-  // Send to owner (ADMIN ONLY)
+  // Send to owner (ADMIN ONLY) - generates PDF when sending
   async sendToOwner(id: string, user: AuthUser) {
     if (user.role !== 'ADMIN') {
       throw new ForbiddenError('Only administrators can send snaggings');
@@ -274,8 +274,51 @@ export class SnaggingService {
       throw new ValidationError('Can only send draft snaggings');
     }
 
-    const updated = await this.snaggingRepo.update(id, {
-      status: 'SENT_TO_OWNER'
+    // Require admin signature before sending to owner
+    if (!snagging.adminSignatureUrl) {
+      throw new ValidationError('Admin signature is required before sending to owner. Please sign the snagging report first.');
+    }
+
+    // Load full relations for PDF generation
+    const snaggingWithDetails = await this.snaggingRepo.findByIdWithDetails(id);
+    if (!snaggingWithDetails) {
+      throw new NotFoundError('Snagging not found');
+    }
+
+    // Generate PDF when sending to owner (includes admin signature if present)
+    const pdfData = {
+      ...snaggingWithDetails,
+      adminName: snaggingWithDetails.createdByAdmin.name || snaggingWithDetails.createdByAdmin.email,
+      ownerName: snaggingWithDetails.owner.name || snaggingWithDetails.owner.email
+    };
+
+    const pdfBuffer = await this.documentService.generatePDF('snagging-report-v1', pdfData);
+
+    // Upload to Cloudinary
+    const uploadResult = await this.cloudinaryService.uploadFileDirectly({
+      fileBuffer: pdfBuffer,
+      fileName: `snagging_${snagging.id}_sent.pdf`,
+      mimeType: 'application/pdf',
+      userId: user.id
+    });
+
+    // Update status and PDF URL
+    const updated = await prisma.snagging.update({
+      where: { id },
+      data: {
+        status: 'SENT_TO_OWNER',
+        pdfUrl: uploadResult.publicUrl,
+        pdfPublicId: uploadResult.key
+      },
+      include: {
+        unit: true,
+        owner: true,
+        createdByAdmin: true,
+        items: {
+          include: { images: { orderBy: { sortOrder: 'asc' } } },
+          orderBy: { sortOrder: 'asc' }
+        }
+      }
     });
 
     await this.auditService.create({
@@ -284,7 +327,7 @@ export class SnaggingService {
       entityId: id,
       actorId: user.id,
       unitId: snagging.unitId,
-      changes: { status: { from: 'DRAFT', to: 'SENT_TO_OWNER' } }
+      changes: { status: { from: 'DRAFT', to: 'SENT_TO_OWNER' }, pdfGenerated: true }
     });
 
     // Notify owner that snagging was sent
@@ -440,7 +483,7 @@ export class SnaggingService {
     return updated;
   }
 
-  // Accept snagging - NO SIGNATURES, just acceptance (✅ FIXED RELATION LOADING)
+  // Accept snagging - REQUIRES BOTH SIGNATURES
   async acceptSnagging(id: string, user: AuthUser) {
     const snagging = await this.checkAccess(id, user, 'action');
 
@@ -448,20 +491,32 @@ export class SnaggingService {
       throw new ValidationError('Can only accept when sent to owner');
     }
 
-    // ✅ FIX: Load full relations for PDF generation
+    // Validate both signatures are present
+    if (!snagging.adminSignatureUrl) {
+      throw new ValidationError('Admin signature is required before acceptance');
+    }
+    if (!snagging.ownerSignatureUrl) {
+      throw new ValidationError('Please sign the snagging report before accepting');
+    }
+
+    // Load full relations for PDF generation
     const snaggingWithDetails = await this.snaggingRepo.findByIdWithDetails(id);
 
     if (!snaggingWithDetails) {
       throw new NotFoundError('Snagging not found');
     }
 
-    // Generate PDF with names (no signatures)
+    // Generate final PDF with both e-signatures
     const pdfData = {
       ...snaggingWithDetails,
       adminName: snaggingWithDetails.createdByAdmin.name || snaggingWithDetails.createdByAdmin.email,
       ownerName: snaggingWithDetails.owner.name || snaggingWithDetails.owner.email,
-      acceptedAt: new Date()
-      // NO signature fields
+      acceptedAt: new Date(),
+      // Include signature URLs for PDF template
+      adminSignatureUrl: snagging.adminSignatureUrl,
+      ownerSignatureUrl: snagging.ownerSignatureUrl,
+      adminSignedAt: snagging.adminSignedAt,
+      ownerSignedAt: snagging.ownerSignedAt
     };
 
     const pdfBuffer = await this.documentService.generatePDF('snagging-report-v1', pdfData);
@@ -474,13 +529,12 @@ export class SnaggingService {
       userId: user.id
     });
 
-    // ✅ FIX: Correct Cloudinary response mapping
-    // Cloudinary upload service returns: { publicUrl, key }
+    // Update with final status and PDF
     const updated = await this.snaggingRepo.update(id, {
       status: 'ACCEPTED',
       acceptedAt: new Date(),
-      pdfUrl: uploadResult.publicUrl,      // ✅ Cloudinary publicUrl (maps to secure_url)
-      pdfPublicId: uploadResult.key        // ✅ Cloudinary key (maps to public_id)
+      pdfUrl: uploadResult.publicUrl,
+      pdfPublicId: uploadResult.key
     });
 
     await this.auditService.create({
@@ -489,7 +543,11 @@ export class SnaggingService {
       entityId: id,
       actorId: user.id,
       unitId: snagging.unitId,
-      changes: { status: { from: 'SENT_TO_OWNER', to: 'ACCEPTED' } }
+      changes: {
+        status: { from: 'SENT_TO_OWNER', to: 'ACCEPTED' },
+        adminSigned: !!snagging.adminSignatureUrl,
+        ownerSigned: !!snagging.ownerSignatureUrl
+      }
     });
 
     await this.auditService.create({
@@ -498,7 +556,7 @@ export class SnaggingService {
       entityId: id,
       actorId: user.id,
       unitId: snagging.unitId,
-      changes: { pdfUrl: uploadResult.publicUrl }
+      changes: { pdfUrl: uploadResult.publicUrl, finalPdf: true }
     });
 
     // Notify admin that owner accepted snagging
@@ -633,5 +691,158 @@ export class SnaggingService {
 
     // Return in paginated response format for consistency
     return createPaginatedResponse(snaggings, 1, snaggings.length, snaggings.length);
+  }
+
+  // ========== E-SIGNATURE METHODS ==========
+
+  // Admin sign snagging (can sign in DRAFT or SENT_TO_OWNER status)
+  // Auto-generates PDF when admin signs
+  async updateAdminSignature(id: string, data: UpdateSignatureDto, user: AuthUser) {
+    if (user.role !== 'ADMIN') {
+      throw new ForbiddenError('Only administrators can sign snaggings');
+    }
+
+    const snagging = await this.snaggingRepo.findById(id);
+    if (!snagging) {
+      throw new NotFoundError('Snagging not found');
+    }
+
+    // Admin can sign in DRAFT or SENT_TO_OWNER status
+    if (!['DRAFT', 'SENT_TO_OWNER'].includes(snagging.status)) {
+      throw new ValidationError(`Cannot sign snagging in ${snagging.status} status`);
+    }
+
+    // Update admin signature first
+    await prisma.snagging.update({
+      where: { id },
+      data: {
+        adminSignatureUrl: data.signatureUrl,
+        adminSignedAt: new Date()
+      }
+    });
+
+    // Load full relations for PDF generation
+    const snaggingWithDetails = await this.snaggingRepo.findByIdWithDetails(id);
+    if (!snaggingWithDetails) {
+      throw new NotFoundError('Snagging not found');
+    }
+
+    // Auto-generate PDF when admin signs
+    const pdfData = {
+      ...snaggingWithDetails,
+      adminName: snaggingWithDetails.createdByAdmin.name || snaggingWithDetails.createdByAdmin.email,
+      ownerName: snaggingWithDetails.owner.name || snaggingWithDetails.owner.email
+    };
+
+    const pdfBuffer = await this.documentService.generatePDF('snagging-report-v1', pdfData);
+
+    // Upload to Cloudinary
+    const uploadResult = await this.cloudinaryService.uploadFileDirectly({
+      fileBuffer: pdfBuffer,
+      fileName: `snagging_${snagging.id}_signed.pdf`,
+      mimeType: 'application/pdf',
+      userId: user.id
+    });
+
+    // Update with new PDF URL
+    const updated = await prisma.snagging.update({
+      where: { id },
+      data: {
+        pdfUrl: uploadResult.publicUrl,
+        pdfPublicId: uploadResult.key
+      },
+      include: {
+        unit: true,
+        owner: true,
+        createdByAdmin: true,
+        items: {
+          include: { images: { orderBy: { sortOrder: 'asc' } } },
+          orderBy: { sortOrder: 'asc' }
+        }
+      }
+    });
+
+    await this.auditService.create({
+      action: AuditAction.SNAGGING_UPDATED,
+      entityType: 'snagging',
+      entityId: id,
+      actorId: user.id,
+      unitId: snagging.unitId,
+      changes: { adminSignatureAdded: true, pdfGenerated: true }
+    });
+
+    return updated;
+  }
+
+  // Owner sign snagging (can only sign in SENT_TO_OWNER status)
+  // Auto-regenerates PDF when owner signs
+  async updateOwnerSignature(id: string, data: UpdateSignatureDto, user: AuthUser) {
+    const snagging = await this.checkAccess(id, user, 'action');
+
+    // Owner can only sign when status is SENT_TO_OWNER
+    if (snagging.status !== 'SENT_TO_OWNER') {
+      throw new ValidationError('Can only sign snagging when it has been sent to you');
+    }
+
+    // Update owner signature first
+    await prisma.snagging.update({
+      where: { id },
+      data: {
+        ownerSignatureUrl: data.signatureUrl,
+        ownerSignedAt: new Date()
+      }
+    });
+
+    // Load full relations for PDF generation
+    const snaggingWithDetails = await this.snaggingRepo.findByIdWithDetails(id);
+    if (!snaggingWithDetails) {
+      throw new NotFoundError('Snagging not found');
+    }
+
+    // Auto-regenerate PDF with owner signature
+    const pdfData = {
+      ...snaggingWithDetails,
+      adminName: snaggingWithDetails.createdByAdmin.name || snaggingWithDetails.createdByAdmin.email,
+      ownerName: snaggingWithDetails.owner.name || snaggingWithDetails.owner.email
+    };
+
+    const pdfBuffer = await this.documentService.generatePDF('snagging-report-v1', pdfData);
+
+    // Upload to Cloudinary
+    const uploadResult = await this.cloudinaryService.uploadFileDirectly({
+      fileBuffer: pdfBuffer,
+      fileName: `snagging_${snagging.id}_owner_signed.pdf`,
+      mimeType: 'application/pdf',
+      userId: user.id
+    });
+
+    // Update with new PDF URL
+    const updated = await prisma.snagging.update({
+      where: { id },
+      data: {
+        pdfUrl: uploadResult.publicUrl,
+        pdfPublicId: uploadResult.key
+      },
+      include: {
+        unit: true,
+        owner: true,
+        createdByAdmin: true,
+        items: {
+          include: { images: { orderBy: { sortOrder: 'asc' } } },
+          orderBy: { sortOrder: 'asc' }
+        }
+      }
+    });
+
+    await this.auditService.create({
+      action: AuditAction.SNAGGING_UPDATED,
+      entityType: 'snagging',
+      entityId: id,
+      actorId: user.id,
+      unitId: snagging.unitId,
+      changes: { ownerSignatureAdded: true, pdfRegenerated: true }
+    });
+
+    return updated;
   }
 }

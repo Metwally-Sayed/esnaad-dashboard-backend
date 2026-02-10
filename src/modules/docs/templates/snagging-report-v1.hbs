@@ -324,6 +324,19 @@
       color: #666;
     }
 
+    .signature-image {
+      max-width: 200px;
+      max-height: 80px;
+      margin-bottom: 10px;
+      border-bottom: 1px solid #e0e0e0;
+    }
+
+    .signature-timestamp {
+      font-size: 11px;
+      color: #999;
+      margin-top: 5px;
+    }
+
     .appointment-info {
       background: #e8f8f5;
       border-left: 4px solid #1abc9c;
@@ -502,16 +515,28 @@
       <div class="footer-grid">
         <div class="footer-item">
           <h3>Accepted By</h3>
+          {{#if ownerSignatureUrl}}
+          <img src="{{ownerSignatureUrl}}" alt="Owner Signature" class="signature-image" />
+          {{/if}}
           <p>
             <strong>{{ownerName}}</strong><br>
             {{#if acceptedAt}}Accepted on: {{formatDate acceptedAt 'MMMM DD, YYYY [at] HH:mm'}}{{/if}}
+            {{#if ownerSignedAt}}
+            <span class="signature-timestamp"><br>Signed: {{formatDate ownerSignedAt 'MMMM DD, YYYY [at] HH:mm'}}</span>
+            {{/if}}
           </p>
         </div>
         <div class="footer-item">
           <h3>Prepared By</h3>
+          {{#if adminSignatureUrl}}
+          <img src="{{adminSignatureUrl}}" alt="Administrator Signature" class="signature-image" />
+          {{/if}}
           <p>
             <strong>{{adminName}}</strong><br>
             Inspector / Administrator
+            {{#if adminSignedAt}}
+            <span class="signature-timestamp"><br>Signed: {{formatDate adminSignedAt 'MMMM DD, YYYY [at] HH:mm'}}</span>
+            {{/if}}
           </p>
         </div>
       </div>

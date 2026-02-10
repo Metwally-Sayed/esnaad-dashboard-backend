@@ -345,7 +345,12 @@ export class HandoverRepository {
         scheduledAt: handover.scheduledAt,
         handoverAt: handover.handoverAt,
         notes: handover.notes,
-        createdAt: handover.createdAt
+        createdAt: handover.createdAt,
+        // E-Signature fields for PDF
+        adminSignatureUrl: handover.adminSignatureUrl,
+        ownerSignatureUrl: handover.ownerSignatureUrl,
+        adminSignedAt: handover.adminSignedAt,
+        ownerSignedAt: handover.ownerSignedAt
       },
       unit: handover.unit,
       owner: {

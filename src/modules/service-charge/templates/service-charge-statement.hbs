@@ -203,7 +203,7 @@
         <!-- Header -->
         <div class="header">
             <h1>Service Charge Statement</h1>
-            <div class="subtitle">{{period}}</div>
+            <div class="subtitle">{{periodLabel}}</div>
         </div>
 
         <!-- Unit Information -->
@@ -255,6 +255,7 @@
                     </tr>
                 </thead>
                 <tbody>
+                    {{#if hasPercentage}}
                     <tr>
                         <td>Unit Value</td>
                         <td class="amount">{{unitPrice}}</td>
@@ -274,15 +275,36 @@
                             {{calculatedAmount}}
                         </td>
                     </tr>
+                    {{else}}
+                    <tr>
+                        <td>
+                            Service Charge Amount
+                            {{#if isOverridden}}
+                            <span class="override-badge">OVERRIDDEN</span>
+                            {{/if}}
+                        </td>
+                        <td class="amount {{#if isOverridden}}strikethrough{{/if}}">
+                            {{calculatedAmount}}
+                        </td>
+                    </tr>
+                    {{/if}}
                     {{#if isOverridden}}
                     <tr>
-                        <td>Overridden Amount</td>
+                        <td>Adjusted Amount</td>
                         <td class="amount">{{overriddenAmount}}</td>
                     </tr>
                     {{/if}}
                     <tr class="total-row">
-                        <td><strong>Total Amount Due</strong></td>
+                        <td><strong>Total Amount</strong></td>
                         <td class="amount total-amount">{{finalAmount}}</td>
+                    </tr>
+                    <tr>
+                        <td>Amount Paid</td>
+                        <td class="amount" style="color: #059669;">{{paidAmount}}</td>
+                    </tr>
+                    <tr class="total-row">
+                        <td><strong>Balance Due</strong></td>
+                        <td class="amount total-amount" style="color: {{#if isPaid}}#059669{{else}}#d97706{{/if}};">{{balance}}</td>
                     </tr>
                 </tbody>
             </table>
@@ -323,7 +345,7 @@
             <p><strong>Account Name:</strong> [Account Name]</p>
             <p><strong>Account Number:</strong> [Account Number]</p>
             <p><strong>IBAN:</strong> [IBAN Number]</p>
-            <p><strong>Reference:</strong> {{unitNumber}} - {{period}}</p>
+            <p><strong>Reference:</strong> {{unitNumber}} - {{periodLabel}}</p>
         </div>
 
         <!-- Footer -->

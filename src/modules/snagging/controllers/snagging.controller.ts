@@ -10,7 +10,8 @@ import {
   cancelSnaggingSchema,
   listSnaggingsSchema,
   getSnaggingByIdSchema,
-  getSnaggingsByUnitIdSchema
+  getSnaggingsByUnitIdSchema,
+  updateSignatureSchema
 } from '../dto/snagging.dto';
 
 const snaggingService = new SnaggingService();
@@ -246,6 +247,60 @@ export const regeneratePdf = async (
       req.user!
     );
     res.json(successResponse(snagging, 'PDF regenerated successfully'));
+  } catch (error) {
+    next(error);
+  }
+};
+
+// ========== E-SIGNATURE ENDPOINTS ==========
+
+/**
+ * POST /api/snaggings/:id/sign
+ * Admin sign snagging (ADMIN ONLY)
+ * Can sign in DRAFT or SENT_TO_OWNER status
+ */
+export const updateAdminSignature = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const validated = updateSignatureSchema.parse({
+      params: req.params,
+      body: req.body
+    });
+    const snagging = await snaggingService.updateAdminSignature(
+      validated.params.id,
+      validated.body,
+      req.user!
+    );
+    res.json(successResponse(snagging, 'Admin signature added successfully'));
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * POST /api/snaggings/:id/owner-sign
+ * Owner sign snagging (OWNER ONLY)
+ * Can only sign in SENT_TO_OWNER status
+ */
+export const updateOwnerSignature = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+) => {
+  try {
+    const validated = updateSignatureSchema.parse({
+      params: req.params,
+      body: req.body
+    });
+    const snagging = await snaggingService.updateOwnerSignature(
+      validated.params.id,
+      validated.body,
+      req.user!
+    );
+    res.json(successResponse(snagging, 'Owner signature added successfully'));
   } catch (error) {
     next(error);
   }

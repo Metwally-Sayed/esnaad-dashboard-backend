@@ -34,6 +34,16 @@ export function createHandoverRoutes(prisma: PrismaClient): Router {
   // This is the ONLY owner-accessible endpoint in handover module
   router.post('/:id/accept', controller.ownerAccept);
 
+  // E-Signature routes
+  // Admin sign (ADMIN only) - can sign in DRAFT or SENT_TO_OWNER
+  router.post('/:id/sign', requireRole(Role.ADMIN), controller.updateAdminSignature);
+
+  // Owner sign - can sign in SENT_TO_OWNER only
+  router.post('/:id/owner-sign', controller.updateOwnerSignature);
+
+  // Regenerate PDF (ADMIN only)
+  router.post('/:id/regenerate-pdf', requireRole(Role.ADMIN), controller.regeneratePdf);
+
   // DEPRECATED endpoints (kept for backward compatibility)
   router.post('/:id/owner-confirm', controller.ownerConfirm);
   router.post('/:id/request-changes', controller.requestChanges);

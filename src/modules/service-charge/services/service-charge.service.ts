@@ -10,6 +10,7 @@ import {
 import {
   GetAllProjectServiceChargesQueryDto,
   CreateProjectServiceChargeDto,
+  CreateSimpleServiceChargeDto,
   UpdateProjectServiceChargeDto,
   GetUnitServiceChargesQueryDto,
   OverrideUnitServiceChargeDto,
@@ -261,6 +262,135 @@ export class ServiceChargeService {
   }
 
   /**
+   * Create a simple service charge for a single unit
+   * Simplified flow: Year, Period Type, Due Date, Amount, Paid, Balance
+   */
+  async createSimpleServiceCharge(
+    data: CreateSimpleServiceChargeDto,
+    requestingUser: { id: string; role: Role }
+  ): Promise<any> {
+    if (requestingUser.role !== Role.ADMIN) {
+      throw new ForbiddenError('Only administrators can create service charges');
+    }
+
+    // Get unit with project info
+    const unit = await prisma.unit.findUnique({
+      where: { id: data.unitId },
+      include: {
+        project: true,
+        owner: { select: { id: true, email: true, name: true } },
+      },
+    });
+
+    if (!unit) {
+      throw new NotFoundError('Unit not found');
+    }
+
+    if (!unit.projectId) {
+      throw new ConflictError('Unit must be assigned to a project');
+    }
+
+    // Check for duplicate (unit + year + quarter combination)
+    const existingCharge = await prisma.unitServiceCharge.findFirst({
+      where: {
+        unitId: data.unitId,
+        projectServiceCharge: {
+          year: data.year,
+          quarter: data.periodType === 'QUARTERLY' ? data.quarter! : null,
+        },
+      },
+    });
+
+    if (existingCharge) {
+      throw new ConflictError(
+        `Service charge already exists for this unit for ${data.periodType === 'QUARTERLY' ? `Q${data.quarter} ` : ''}${data.year}`
+      );
+    }
+
+    // Find or create project service charge
+    let projectServiceCharge = await prisma.projectServiceCharge.findFirst({
+      where: {
+        projectId: unit.projectId,
+        year: data.year,
+        quarter: data.periodType === 'QUARTERLY' ? data.quarter! : null,
+      },
+    });
+
+    if (!projectServiceCharge) {
+      // Create project service charge container
+      projectServiceCharge = await prisma.projectServiceCharge.create({
+        data: {
+          projectId: unit.projectId,
+          year: data.year,
+          quarter: data.periodType === 'QUARTERLY' ? data.quarter! : null,
+          periodType: data.periodType,
+          percentage: null, // Per-unit charge
+          dueDate: data.dueDate ? new Date(data.dueDate) : null,
+          createdById: requestingUser.id,
+        },
+      });
+    }
+
+    // Create unit service charge
+    const unitServiceCharge = await prisma.unitServiceCharge.create({
+      data: {
+        unitId: data.unitId,
+        projectServiceChargeId: projectServiceCharge.id,
+        amount: new Decimal(data.amount),
+        paidAmount: new Decimal(data.paidAmount || 0),
+        isPaid: data.paidAmount >= data.amount,
+        paidAt: data.paidAmount >= data.amount ? new Date() : null,
+      },
+      include: {
+        unit: {
+          include: {
+            project: true,
+            owner: { select: { id: true, email: true, name: true } },
+          },
+        },
+        projectServiceCharge: true,
+      },
+    });
+
+    // Audit log
+    await this.createAuditLog({
+      action: AuditAction.SERVICE_CHARGE_CREATED,
+      entityType: 'unit_service_charge',
+      entityId: unitServiceCharge.id,
+      actorId: requestingUser.id,
+      unitId: data.unitId,
+      changes: {
+        created: {
+          ...data,
+          balance: data.amount - (data.paidAmount || 0),
+        },
+      },
+    });
+
+    // Notify owner if exists
+    if (unit.ownerId) {
+      await this.notificationService.createNotification({
+        userId: unit.ownerId,
+        type: 'SERVICE_CHARGE_CREATED',
+        title: 'New Service Charge',
+        message: `A new service charge of ${data.amount} AED has been created for ${data.periodType === 'YEARLY' ? `year ${data.year}` : `Q${data.quarter} ${data.year}`}`,
+        entityType: 'service_charge',
+        entityId: unitServiceCharge.id,
+        actionUrl: '/service-charge',
+        metadata: {
+          year: data.year,
+          quarter: data.quarter,
+          periodType: data.periodType,
+          amount: data.amount,
+          paidAmount: data.paidAmount,
+        },
+      });
+    }
+
+    return unitServiceCharge;
+  }
+
+  /**
    * Update project service charge
    */
   async updateProjectServiceCharge(
@@ -384,14 +514,23 @@ export class ServiceChargeService {
       throw new NotFoundError('Unit service charge not found');
     }
 
-    const updated = await this.repo.updateUnitServiceCharge(id, {
+    const updateData: any = {
       overriddenAmount: new Decimal(data.overriddenAmount),
       isOverridden: true,
       overriddenAt: new Date(),
       overriddenBy: {
         connect: { id: requestingUser.id },
       },
-    });
+    };
+
+    // Update paidAmount if provided
+    if (data.paidAmount !== undefined) {
+      updateData.paidAmount = new Decimal(data.paidAmount);
+      updateData.isPaid = data.paidAmount >= data.overriddenAmount;
+      updateData.paidAt = data.paidAmount >= data.overriddenAmount ? new Date() : null;
+    }
+
+    const updated = await this.repo.updateUnitServiceCharge(id, updateData);
 
     // Audit log
     await this.createAuditLog({

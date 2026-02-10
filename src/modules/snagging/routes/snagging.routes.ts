@@ -15,7 +15,9 @@ import {
   scheduleAppointment,
   accept,
   getByUnitId,
-  regeneratePdf
+  regeneratePdf,
+  updateAdminSignature,
+  updateOwnerSignature
 } from '../controllers/snagging.controller';
 
 // DTOs
@@ -28,7 +30,8 @@ import {
   cancelSnaggingSchema,
   listSnaggingsSchema,
   getSnaggingByIdSchema,
-  getSnaggingsByUnitIdSchema
+  getSnaggingsByUnitIdSchema,
+  updateSignatureSchema
 } from '../dto/snagging.dto';
 
 const router = Router();
@@ -167,6 +170,31 @@ router.post(
   '/:id/accept',
   validate(acceptSnaggingSchema),
   accept
+);
+
+// ========== E-SIGNATURE ROUTES ==========
+
+/**
+ * POST /api/snaggings/:id/sign
+ * Admin sign snagging (ADMIN ONLY)
+ * Can sign in DRAFT or SENT_TO_OWNER status
+ */
+router.post(
+  '/:id/sign',
+  requireRole(Role.ADMIN),
+  validate(updateSignatureSchema),
+  updateAdminSignature
+);
+
+/**
+ * POST /api/snaggings/:id/owner-sign
+ * Owner sign snagging (OWNER ONLY)
+ * Can only sign in SENT_TO_OWNER status
+ */
+router.post(
+  '/:id/owner-sign',
+  validate(updateSignatureSchema),
+  updateOwnerSignature
 );
 
 export default router;

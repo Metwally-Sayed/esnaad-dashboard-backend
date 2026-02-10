@@ -7,6 +7,7 @@ import {
   getAllProjectServiceChargesSchema,
   getProjectServiceChargeByIdSchema,
   createProjectServiceChargeSchema,
+  createSimpleServiceChargeSchema,
   updateProjectServiceChargeSchema,
   deleteProjectServiceChargeSchema,
   getUnitServiceChargesSchema,
@@ -47,6 +48,15 @@ router.post(
   requireRole(Role.ADMIN),
   validate(createProjectServiceChargeSchema),
   controller.createProjectServiceCharge
+);
+
+// Simple single-unit service charge creation
+router.post(
+  '/admin/service-charges/simple',
+  requireAuth,
+  requireRole(Role.ADMIN),
+  validate(createSimpleServiceChargeSchema),
+  controller.createSimpleServiceCharge
 );
 
 router.patch(

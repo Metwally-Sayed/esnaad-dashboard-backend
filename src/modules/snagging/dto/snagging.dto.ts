@@ -117,8 +117,19 @@ export const getSnaggingsByUnitIdSchema = z.object({
   })
 });
 
+// E-Signature schema (for admin or owner signing)
+export const updateSignatureSchema = z.object({
+  params: z.object({
+    id: z.string().cuid('Invalid snagging ID')
+  }),
+  body: z.object({
+    signatureUrl: z.string().url('Invalid signature URL')
+  })
+});
+
 // Type exports
 export type CreateSnaggingDto = z.infer<typeof createSnaggingSchema>['body'];
 export type UpdateSnaggingDto = z.infer<typeof updateSnaggingSchema>['body'];
 export type ScheduleAppointmentDto = z.infer<typeof scheduleAppointmentSchema>['body'];
 export type SnaggingFiltersDto = z.infer<typeof listSnaggingsSchema>['query'];
+export type UpdateSignatureDto = z.infer<typeof updateSignatureSchema>['body'];

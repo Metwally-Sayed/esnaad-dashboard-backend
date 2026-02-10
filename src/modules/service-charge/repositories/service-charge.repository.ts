@@ -37,6 +37,7 @@ export class ServiceChargeRepository {
             id: true,
             unitId: true,
             amount: true,
+            paidAmount: true,
             isOverridden: true,
             overriddenAmount: true,
             unit: {

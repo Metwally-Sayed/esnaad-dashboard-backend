@@ -341,6 +341,12 @@ model Snagging {
   pdfUrl           String? // Cloudinary secure_url for PDF
   pdfPublicId      String? // Cloudinary public_id
 
+  // E-Signature fields (Cloudinary URLs for signature images)
+  adminSignatureUrl String?   // Cloudinary URL for admin signature image
+  ownerSignatureUrl String?   // Cloudinary URL for owner signature image
+  adminSignedAt     DateTime? // When admin signed
+  ownerSignedAt     DateTime? // When owner signed
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -414,8 +420,14 @@ model Handover {
   // PDF and signatures
   pdfUrl         String? // Final PDF URL (generated on acceptance)
   pdfPublicId    String? // R2/Cloudinary public ID
-  adminSignature String? // Admin name (from DB)
-  ownerSignature String? // Owner name (from DB)
+  adminSignature String? // Admin name (from DB) - DEPRECATED, use adminSignatureUrl
+  ownerSignature String? // Owner name (from DB) - DEPRECATED, use ownerSignatureUrl
+
+  // E-Signature fields (Cloudinary URLs for signature images)
+  adminSignatureUrl String?   // Cloudinary URL for admin signature image
+  ownerSignatureUrl String?   // Cloudinary URL for owner signature image
+  adminSignedAt     DateTime? // When admin signed
+  ownerSignedAt     DateTime? // When owner signed
 
   // Content
   notes         String? @db.Text // Public notes visible to owner
@@ -777,11 +789,14 @@ model UnitServiceCharge {
   overriddenById          String?
   overriddenAt            DateTime?
 
+  // Payment tracking
+  paidAmount              Decimal               @default(0) @db.Decimal(12, 2)  // Amount already paid
+
   // PDF Statement
   pdfUrl                  String?               // Cloudinary URL for statement
   pdfGeneratedAt          DateTime?
 
-  // Status
+  // Status (legacy - kept for compatibility)
   isPaid                  Boolean               @default(false)
   paidAt                  DateTime?
 

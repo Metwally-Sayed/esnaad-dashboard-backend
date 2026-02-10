@@ -12,7 +12,8 @@ import {
   RequestChangesSchema,
   AdminConfirmSchema,
   CancelHandoverSchema,
-  UpdateItemsSchema
+  UpdateItemsSchema,
+  UpdateSignatureSchema
 } from '../dto/handover.dto';
 import { AuthenticatedRequest } from '@/common/types/auth.types';
 
@@ -246,6 +247,55 @@ export class HandoverController {
         success: true,
         data: result,
         message: 'Handover accepted successfully. PDF agreement generated.'
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  // ========== E-SIGNATURE HANDLERS ==========
+
+  // Admin sign handover
+  updateAdminSignature = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      const data = UpdateSignatureSchema.parse(req.body);
+      const handover = await this.handoverService.updateAdminSignature(req.params.id, data, req.user!);
+
+      res.json({
+        success: true,
+        data: handover,
+        message: 'Admin signature added successfully'
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  // Owner sign handover
+  updateOwnerSignature = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      const data = UpdateSignatureSchema.parse(req.body);
+      const handover = await this.handoverService.updateOwnerSignature(req.params.id, data, req.user!);
+
+      res.json({
+        success: true,
+        data: handover,
+        message: 'Owner signature added successfully'
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  // Regenerate PDF
+  regeneratePdf = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      const result = await this.handoverService.regeneratePdf(req.params.id, req.user!);
+
+      res.json({
+        success: true,
+        data: result,
+        message: 'PDF regenerated successfully'
       });
     } catch (error) {
       next(error);

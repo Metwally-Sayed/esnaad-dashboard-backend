@@ -89,6 +89,11 @@ export const CancelHandoverSchema = z.object({
   reason: z.string().min(1).max(1000)
 });
 
+// E-Signature schemas
+export const UpdateSignatureSchema = z.object({
+  signatureUrl: z.string().url('Invalid signature URL')
+});
+
 export const UpdateItemsSchema = z.object({
   items: z.array(z.object({
     id: z.string().cuid().optional(), // Optional for new items
@@ -129,3 +134,4 @@ export type HandoverFiltersDto = z.infer<typeof HandoverFiltersSchema>;
 export type MessageFiltersDto = z.infer<typeof MessageFiltersSchema>;
 export type HandoverStatus = z.infer<typeof HandoverStatusSchema>;
 export type HandoverItemStatus = z.infer<typeof HandoverItemStatusSchema>;
+export type UpdateSignatureDto = z.infer<typeof UpdateSignatureSchema>;

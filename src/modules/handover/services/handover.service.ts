@@ -1,6 +1,6 @@
 import { User, HandoverStatus, AuditAction, Role } from '@prisma/client';
 import { HandoverRepository } from '../repositories/handover.repository';
-import { CreateHandoverDto, UpdateHandoverDto, HandoverFiltersDto, MessageFiltersDto } from '../dto/handover.dto';
+import { CreateHandoverDto, UpdateHandoverDto, HandoverFiltersDto, MessageFiltersDto, UpdateSignatureDto } from '../dto/handover.dto';
 import { UnauthorizedError, ForbiddenError, NotFoundError, ValidationError } from '@/common/errors/AppError';
 import { PrismaClient } from '@prisma/client';
 import { DocumentService } from '@/modules/docs/services/document.service';
@@ -236,7 +236,7 @@ export class HandoverService {
     return updated;
   }
 
-  // Send to owner
+  // Send to owner - generates PDF when sending
   async sendToOwner(id: string, message: string | undefined, user: User): Promise<any> {
     if (user.role !== 'ADMIN') {
       throw new ForbiddenError('Only administrators can send handovers to owners');
@@ -245,7 +245,33 @@ export class HandoverService {
     const handover = await this.checkAccess(id, user, 'action');
     this.validateStateTransition(handover.status, 'SENT_TO_OWNER');
 
-    const updated = await this.handoverRepo.updateStatus(id, 'SENT_TO_OWNER');
+    // Require admin signature before sending to owner
+    if (!handover.adminSignatureUrl) {
+      throw new ValidationError('Admin signature is required before sending to owner. Please sign the handover first.');
+    }
+
+    // Create snapshot for PDF generation
+    const snapshot = await this.handoverRepo.createSnapshot(id);
+
+    // Generate PDF when sending to owner (includes admin signature if present)
+    const document = await this.documentService.generateHandoverAgreement(id, snapshot, user);
+
+    // Update status and PDF URL
+    const updated = await this.prisma.handover.update({
+      where: { id },
+      data: {
+        status: 'SENT_TO_OWNER',
+        pdfUrl: document.url,
+        pdfPublicId: document.key
+      },
+      include: {
+        unit: true,
+        owner: true,
+        createdByAdmin: true,
+        items: { orderBy: { sortOrder: 'asc' } },
+        attachments: true
+      }
+    });
 
     // Add message if provided
     if (message) {
@@ -263,7 +289,7 @@ export class HandoverService {
       entityId: id,
       actorId: user.id,
       unitId: handover.unitId,
-      metadata: { message }
+      metadata: { message, pdfGenerated: true }
     });
 
     // Notify owner that handover was sent
@@ -283,7 +309,7 @@ export class HandoverService {
     return updated;
   }
 
-  // NEW SIMPLIFIED FLOW: Owner Accept
+  // NEW SIMPLIFIED FLOW: Owner Accept (requires both signatures)
   async ownerAccept(id: string, user: User): Promise<any> {
     // Get handover without admin-only check
     const handover = await this.handoverRepo.findById(id);
@@ -299,7 +325,15 @@ export class HandoverService {
     // Validate state
     this.validateStateTransition(handover.status, 'ACCEPTED');
 
-    // Get admin and owner details for signatures
+    // Validate both signatures are present
+    if (!handover.adminSignatureUrl) {
+      throw new ValidationError('Admin signature is required before acceptance');
+    }
+    if (!handover.ownerSignatureUrl) {
+      throw new ValidationError('Please sign the handover before accepting');
+    }
+
+    // Get admin and owner details for legacy signature fields
     const admin = await this.prisma.user.findUnique({
       where: { id: handover.createdByAdminId },
       select: { name: true }
@@ -310,10 +344,10 @@ export class HandoverService {
       select: { name: true }
     });
 
-    // Create snapshot for PDF
+    // Create snapshot for PDF (includes signature URLs)
     const snapshot = await this.handoverRepo.createSnapshot(id);
 
-    // Generate PDF with both signatures
+    // Generate final PDF with both e-signatures
     const document = await this.documentService.generateHandoverAgreement(id, snapshot, user);
 
     // Update handover to ACCEPTED with signatures and PDF
@@ -326,6 +360,13 @@ export class HandoverService {
         ownerSignature: owner?.name || 'Owner',
         pdfUrl: document.url,
         pdfPublicId: document.key
+      },
+      include: {
+        unit: true,
+        owner: true,
+        createdByAdmin: true,
+        items: { orderBy: { sortOrder: 'asc' } },
+        attachments: true
       }
     });
 
@@ -338,7 +379,9 @@ export class HandoverService {
       unitId: handover.unitId,
       metadata: {
         pdfUrl: document.url,
-        documentId: document.id
+        documentId: document.id,
+        adminSigned: !!handover.adminSignatureUrl,
+        ownerSigned: !!handover.ownerSignatureUrl
       }
     });
 
@@ -622,5 +665,177 @@ export class HandoverService {
 
     // Return updated handover with items
     return this.handoverRepo.findById(id);
+  }
+
+  // ========== E-SIGNATURE METHODS ==========
+
+  // Admin sign handover (can sign in DRAFT or SENT_TO_OWNER status)
+  // Auto-generates PDF when admin signs
+  async updateAdminSignature(id: string, data: UpdateSignatureDto, user: User): Promise<any> {
+    if (user.role !== 'ADMIN') {
+      throw new ForbiddenError('Only administrators can sign handovers');
+    }
+
+    const handover = await this.checkAccess(id, user, 'action');
+
+    // Admin can sign in DRAFT or SENT_TO_OWNER status
+    if (!['DRAFT', 'SENT_TO_OWNER'].includes(handover.status)) {
+      throw new ValidationError(`Cannot sign handover in ${handover.status} status`);
+    }
+
+    // Update admin signature
+    await this.prisma.handover.update({
+      where: { id },
+      data: {
+        adminSignatureUrl: data.signatureUrl,
+        adminSignedAt: new Date()
+      }
+    });
+
+    // Auto-generate PDF when admin signs
+    const snapshot = await this.handoverRepo.createSnapshot(id);
+    const document = await this.documentService.generateHandoverAgreement(id, snapshot, user);
+
+    // Update handover with PDF URL
+    const updated = await this.prisma.handover.update({
+      where: { id },
+      data: {
+        pdfUrl: document.url,
+        pdfPublicId: document.key
+      },
+      include: {
+        unit: true,
+        owner: true,
+        createdByAdmin: true,
+        items: { orderBy: { sortOrder: 'asc' } },
+        attachments: true
+      }
+    });
+
+    await this.auditService.create({
+      action: 'HANDOVER_UPDATED' as AuditAction,
+      entityType: 'handover',
+      entityId: id,
+      actorId: user.id,
+      unitId: handover.unitId,
+      changes: { adminSignatureAdded: true, pdfGenerated: true }
+    });
+
+    return {
+      ...updated,
+      document
+    };
+  }
+
+  // Owner sign handover (can only sign in SENT_TO_OWNER status)
+  // Auto-regenerates PDF when owner signs
+  async updateOwnerSignature(id: string, data: UpdateSignatureDto, user: User): Promise<any> {
+    const handover = await this.handoverRepo.findById(id);
+    if (!handover) {
+      throw new NotFoundError('Handover not found');
+    }
+
+    // Verify owner
+    if (handover.ownerId !== user.id) {
+      throw new ForbiddenError('Only the assigned owner can sign this handover');
+    }
+
+    // Owner can only sign when status is SENT_TO_OWNER
+    if (handover.status !== 'SENT_TO_OWNER') {
+      throw new ValidationError('Can only sign handover when it has been sent to you');
+    }
+
+    // Update owner signature
+    await this.prisma.handover.update({
+      where: { id },
+      data: {
+        ownerSignatureUrl: data.signatureUrl,
+        ownerSignedAt: new Date()
+      }
+    });
+
+    // Auto-regenerate PDF with owner signature
+    const snapshot = await this.handoverRepo.createSnapshot(id);
+    const document = await this.documentService.generateHandoverAgreement(id, snapshot, user);
+
+    // Update handover with new PDF URL
+    const updated = await this.prisma.handover.update({
+      where: { id },
+      data: {
+        pdfUrl: document.url,
+        pdfPublicId: document.key
+      },
+      include: {
+        unit: true,
+        owner: true,
+        createdByAdmin: true,
+        items: { orderBy: { sortOrder: 'asc' } },
+        attachments: true
+      }
+    });
+
+    await this.auditService.create({
+      action: 'HANDOVER_UPDATED' as AuditAction,
+      entityType: 'handover',
+      entityId: id,
+      actorId: user.id,
+      unitId: handover.unitId,
+      changes: { ownerSignatureAdded: true, pdfRegenerated: true }
+    });
+
+    return {
+      ...updated,
+      document
+    };
+  }
+
+  // Regenerate PDF (Admin only, for already sent/accepted handovers)
+  async regeneratePdf(id: string, user: User): Promise<any> {
+    if (user.role !== 'ADMIN') {
+      throw new ForbiddenError('Only administrators can regenerate PDFs');
+    }
+
+    const handover = await this.checkAccess(id, user, 'action');
+
+    // Can only regenerate for SENT_TO_OWNER or ACCEPTED status
+    if (!['SENT_TO_OWNER', 'ACCEPTED'].includes(handover.status)) {
+      throw new ValidationError(`Cannot regenerate PDF in ${handover.status} status`);
+    }
+
+    // Create snapshot for PDF
+    const snapshot = await this.handoverRepo.createSnapshot(id);
+
+    // Generate PDF
+    const document = await this.documentService.generateHandoverAgreement(id, snapshot, user);
+
+    // Update handover with new PDF URL
+    const updated = await this.prisma.handover.update({
+      where: { id },
+      data: {
+        pdfUrl: document.url,
+        pdfPublicId: document.key
+      },
+      include: {
+        unit: true,
+        owner: true,
+        createdByAdmin: true,
+        items: { orderBy: { sortOrder: 'asc' } },
+        attachments: true
+      }
+    });
+
+    await this.auditService.create({
+      action: 'HANDOVER_PDF_GENERATED' as AuditAction,
+      entityType: 'handover',
+      entityId: id,
+      actorId: user.id,
+      unitId: handover.unitId,
+      metadata: { pdfUrl: document.url, regenerated: true }
+    });
+
+    return {
+      ...updated,
+      document
+    };
   }
 }

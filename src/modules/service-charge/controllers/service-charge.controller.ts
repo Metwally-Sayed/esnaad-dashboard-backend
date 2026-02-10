@@ -64,7 +64,7 @@ export class ServiceChargeController {
 
   /**
    * POST /api/admin/service-charges
-   * Create project service charge (Admin only)
+   * Create project service charge (Admin only) - Legacy multi-unit
    */
   createProjectServiceCharge = async (
     req: Request,
@@ -73,6 +73,30 @@ export class ServiceChargeController {
   ): Promise<void> => {
     try {
       const result = await this.service.createProjectServiceCharge(
+        req.body,
+        req.user!
+      );
+      res.status(201).json({
+        success: true,
+        data: result,
+        message: 'Service charge created successfully',
+      });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /**
+   * POST /api/admin/service-charges/simple
+   * Create simple service charge for single unit (Admin only)
+   */
+  createSimpleServiceCharge = async (
+    req: Request,
+    res: Response,
+    next: NextFunction
+  ): Promise<void> => {
+    try {
+      const result = await this.service.createSimpleServiceCharge(
         req.body,
         req.user!
       );
