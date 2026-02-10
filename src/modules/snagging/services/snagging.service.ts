@@ -694,6 +694,39 @@ export class SnaggingService {
     return createPaginatedResponse(snaggings, 1, snaggings.length, snaggings.length);
   }
 
+  // ========== BACKGROUND PDF GENERATION ==========
+
+  // Generates PDF and uploads to Cloudinary in the background
+  private async generateAndUploadPdf(snaggingId: string, userId: string) {
+    const snaggingWithDetails = await this.snaggingRepo.findByIdWithDetails(snaggingId);
+    if (!snaggingWithDetails) return;
+
+    const pdfData = {
+      ...snaggingWithDetails,
+      adminName: snaggingWithDetails.createdByAdmin.name || snaggingWithDetails.createdByAdmin.email,
+      ownerName: snaggingWithDetails.owner.name || snaggingWithDetails.owner.email
+    };
+
+    const pdfBuffer = await this.documentService.generatePDF('snagging-report-v1', pdfData);
+
+    const uploadResult = await this.cloudinaryService.uploadFileDirectly({
+      fileBuffer: pdfBuffer,
+      fileName: `snagging_${snaggingId}_signed.pdf`,
+      mimeType: 'application/pdf',
+      userId
+    });
+
+    await prisma.snagging.update({
+      where: { id: snaggingId },
+      data: {
+        pdfUrl: uploadResult.publicUrl,
+        pdfPublicId: uploadResult.key
+      }
+    });
+
+    logger.info({ snaggingId }, 'Background PDF generation completed');
+  }
+
   // ========== E-SIGNATURE METHODS ==========
 
   // Admin sign snagging (can sign in DRAFT or SENT_TO_OWNER status)
@@ -713,49 +746,13 @@ export class SnaggingService {
       throw new ValidationError(`Cannot sign snagging in ${snagging.status} status`);
     }
 
-    // Update admin signature
-    await prisma.snagging.update({
+    // Update admin signature and return immediately
+    const updated = await prisma.snagging.update({
       where: { id },
       data: {
         adminSignatureUrl: data.signatureUrl,
         adminSignedAt: new Date()
-      }
-    });
-
-    // Try to auto-generate PDF (non-blocking — signature is already saved)
-    try {
-      const snaggingWithDetails = await this.snaggingRepo.findByIdWithDetails(id);
-      if (snaggingWithDetails) {
-        const pdfData = {
-          ...snaggingWithDetails,
-          adminName: snaggingWithDetails.createdByAdmin.name || snaggingWithDetails.createdByAdmin.email,
-          ownerName: snaggingWithDetails.owner.name || snaggingWithDetails.owner.email
-        };
-
-        const pdfBuffer = await this.documentService.generatePDF('snagging-report-v1', pdfData);
-
-        const uploadResult = await this.cloudinaryService.uploadFileDirectly({
-          fileBuffer: pdfBuffer,
-          fileName: `snagging_${snagging.id}_signed.pdf`,
-          mimeType: 'application/pdf',
-          userId: user.id
-        });
-
-        await prisma.snagging.update({
-          where: { id },
-          data: {
-            pdfUrl: uploadResult.publicUrl,
-            pdfPublicId: uploadResult.key
-          }
-        });
-      }
-    } catch (pdfError: any) {
-      logger.error({ err: pdfError, snaggingId: id }, 'Failed to generate PDF after admin signature — signature was saved successfully');
-    }
-
-    const updated = await prisma.snagging.update({
-      where: { id },
-      data: {},
+      },
       include: {
         unit: true,
         owner: true,
@@ -776,6 +773,11 @@ export class SnaggingService {
       changes: { adminSignatureAdded: true }
     });
 
+    // Generate PDF in the background (don't await — return response immediately)
+    this.generateAndUploadPdf(id, user.id).catch((pdfError) => {
+      logger.error({ err: pdfError, snaggingId: id }, 'Background PDF generation failed after admin signature');
+    });
+
     return updated;
   }
 
@@ -789,49 +791,13 @@ export class SnaggingService {
       throw new ValidationError('Can only sign snagging when it has been sent to you');
     }
 
-    // Update owner signature
-    await prisma.snagging.update({
+    // Update owner signature and return immediately
+    const updated = await prisma.snagging.update({
       where: { id },
       data: {
         ownerSignatureUrl: data.signatureUrl,
         ownerSignedAt: new Date()
-      }
-    });
-
-    // Try to auto-regenerate PDF (non-blocking — signature is already saved)
-    try {
-      const snaggingWithDetails = await this.snaggingRepo.findByIdWithDetails(id);
-      if (snaggingWithDetails) {
-        const pdfData = {
-          ...snaggingWithDetails,
-          adminName: snaggingWithDetails.createdByAdmin.name || snaggingWithDetails.createdByAdmin.email,
-          ownerName: snaggingWithDetails.owner.name || snaggingWithDetails.owner.email
-        };
-
-        const pdfBuffer = await this.documentService.generatePDF('snagging-report-v1', pdfData);
-
-        const uploadResult = await this.cloudinaryService.uploadFileDirectly({
-          fileBuffer: pdfBuffer,
-          fileName: `snagging_${snagging.id}_owner_signed.pdf`,
-          mimeType: 'application/pdf',
-          userId: user.id
-        });
-
-        await prisma.snagging.update({
-          where: { id },
-          data: {
-            pdfUrl: uploadResult.publicUrl,
-            pdfPublicId: uploadResult.key
-          }
-        });
-      }
-    } catch (pdfError: any) {
-      logger.error({ err: pdfError, snaggingId: id }, 'Failed to generate PDF after owner signature — signature was saved successfully');
-    }
-
-    const updated = await prisma.snagging.update({
-      where: { id },
-      data: {},
+      },
       include: {
         unit: true,
         owner: true,
@@ -850,6 +816,11 @@ export class SnaggingService {
       actorId: user.id,
       unitId: snagging.unitId,
       changes: { ownerSignatureAdded: true }
+    });
+
+    // Generate PDF in the background (don't await — return response immediately)
+    this.generateAndUploadPdf(id, user.id).catch((pdfError) => {
+      logger.error({ err: pdfError, snaggingId: id }, 'Background PDF generation failed after owner signature');
     });
 
     return updated;
