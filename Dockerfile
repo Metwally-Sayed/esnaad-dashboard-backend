@@ -29,8 +29,8 @@ RUN npm run build
 # Stage 2: Production stage
 FROM node:22-alpine
 
-# Install OpenSSL for Prisma (required at runtime)
-RUN apk add --no-cache openssl
+# Install OpenSSL for Prisma and Chromium for PDF generation
+RUN apk add --no-cache openssl chromium nss freetype harfbuzz ca-certificates ttf-freefont
 
 # Create non-root user for security
 RUN addgroup -g 1001 -S nodejs && \
@@ -44,6 +44,10 @@ COPY package*.json ./
 
 # Copy Prisma schema BEFORE npm ci (needed for postinstall script)
 COPY --from=builder /app/prisma ./prisma
+
+# Skip Puppeteer's bundled Chromium download (we use system Chromium)
+ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
 
 # Install only production dependencies
 RUN npm ci --only=production && \
