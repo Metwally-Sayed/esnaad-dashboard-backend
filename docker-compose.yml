@@ -49,15 +49,15 @@ services:
       retries: 3
       start_period: 40s
 
-    # Resource limits (adjust based on your needs)
+    # Resource limits (Puppeteer/Chromium needs ~500MB alone)
     deploy:
       resources:
         limits:
-          cpus: '1'
-          memory: 512M
+          cpus: '2'
+          memory: 1536M
         reservations:
           cpus: '0.5'
-          memory: 256M
+          memory: 512M
 
   # Optional: Local PostgreSQL for development/testing
   # Uncomment if you want to run PostgreSQL locally instead of using Neon.tech
