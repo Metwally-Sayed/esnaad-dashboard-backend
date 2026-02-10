@@ -280,36 +280,11 @@ export class SnaggingService {
       throw new ValidationError('Admin signature is required before sending to owner. Please sign the snagging report first.');
     }
 
-    // Load full relations for PDF generation
-    const snaggingWithDetails = await this.snaggingRepo.findByIdWithDetails(id);
-    if (!snaggingWithDetails) {
-      throw new NotFoundError('Snagging not found');
-    }
-
-    // Generate PDF when sending to owner (includes admin signature if present)
-    const pdfData = {
-      ...snaggingWithDetails,
-      adminName: snaggingWithDetails.createdByAdmin.name || snaggingWithDetails.createdByAdmin.email,
-      ownerName: snaggingWithDetails.owner.name || snaggingWithDetails.owner.email
-    };
-
-    const pdfBuffer = await this.documentService.generatePDF('snagging-report-v1', pdfData);
-
-    // Upload to Cloudinary
-    const uploadResult = await this.cloudinaryService.uploadFileDirectly({
-      fileBuffer: pdfBuffer,
-      fileName: `snagging_${snagging.id}_sent.pdf`,
-      mimeType: 'application/pdf',
-      userId: user.id
-    });
-
-    // Update status and PDF URL
+    // Update status immediately and return
     const updated = await prisma.snagging.update({
       where: { id },
       data: {
         status: 'SENT_TO_OWNER',
-        pdfUrl: uploadResult.publicUrl,
-        pdfPublicId: uploadResult.key
       },
       include: {
         unit: true,
@@ -328,7 +303,7 @@ export class SnaggingService {
       entityId: id,
       actorId: user.id,
       unitId: snagging.unitId,
-      changes: { status: { from: 'DRAFT', to: 'SENT_TO_OWNER' }, pdfGenerated: true }
+      changes: { status: { from: 'DRAFT', to: 'SENT_TO_OWNER' } }
     });
 
     // Notify owner that snagging was sent
@@ -343,6 +318,11 @@ export class SnaggingService {
       metadata: {
         unitNumber: updated.unit.unitNumber,
       },
+    });
+
+    // Generate PDF in the background
+    this.generateAndUploadPdf(id, user.id).catch((pdfError) => {
+      logger.error({ err: pdfError, snaggingId: id }, 'Background PDF generation failed after send to owner');
     });
 
     return updated;
@@ -500,42 +480,10 @@ export class SnaggingService {
       throw new ValidationError('Please sign the snagging report before accepting');
     }
 
-    // Load full relations for PDF generation
-    const snaggingWithDetails = await this.snaggingRepo.findByIdWithDetails(id);
-
-    if (!snaggingWithDetails) {
-      throw new NotFoundError('Snagging not found');
-    }
-
-    // Generate final PDF with both e-signatures
-    const pdfData = {
-      ...snaggingWithDetails,
-      adminName: snaggingWithDetails.createdByAdmin.name || snaggingWithDetails.createdByAdmin.email,
-      ownerName: snaggingWithDetails.owner.name || snaggingWithDetails.owner.email,
-      acceptedAt: new Date(),
-      // Include signature URLs for PDF template
-      adminSignatureUrl: snagging.adminSignatureUrl,
-      ownerSignatureUrl: snagging.ownerSignatureUrl,
-      adminSignedAt: snagging.adminSignedAt,
-      ownerSignedAt: snagging.ownerSignedAt
-    };
-
-    const pdfBuffer = await this.documentService.generatePDF('snagging-report-v1', pdfData);
-
-    // Upload to Cloudinary
-    const uploadResult = await this.cloudinaryService.uploadFileDirectly({
-      fileBuffer: pdfBuffer,
-      fileName: `snagging_${snagging.id}_accepted.pdf`,
-      mimeType: 'application/pdf',
-      userId: user.id
-    });
-
-    // Update with final status and PDF
+    // Update status immediately
     const updated = await this.snaggingRepo.update(id, {
       status: 'ACCEPTED',
       acceptedAt: new Date(),
-      pdfUrl: uploadResult.publicUrl,
-      pdfPublicId: uploadResult.key
     });
 
     await this.auditService.create({
@@ -549,15 +497,6 @@ export class SnaggingService {
         adminSigned: !!snagging.adminSignatureUrl,
         ownerSigned: !!snagging.ownerSignatureUrl
       }
-    });
-
-    await this.auditService.create({
-      action: AuditAction.SNAGGING_PDF_GENERATED,
-      entityType: 'snagging',
-      entityId: id,
-      actorId: user.id,
-      unitId: snagging.unitId,
-      changes: { pdfUrl: uploadResult.publicUrl, finalPdf: true }
     });
 
     // Notify admin that owner accepted snagging
@@ -574,6 +513,11 @@ export class SnaggingService {
       },
     });
 
+    // Generate final PDF in the background
+    this.generateAndUploadPdf(id, user.id).catch((pdfError) => {
+      logger.error({ err: pdfError, snaggingId: id }, 'Background PDF generation failed after accept');
+    });
+
     return updated;
   }
 
@@ -585,47 +529,21 @@ export class SnaggingService {
       throw new ValidationError('Can only regenerate PDF for accepted snaggings');
     }
 
-    // Load full relations for PDF generation
-    const snaggingWithDetails = await this.snaggingRepo.findByIdWithDetails(id);
-
-    if (!snaggingWithDetails) {
-      throw new NotFoundError('Snagging not found');
-    }
-
-    // Generate PDF with names (no signatures)
-    const pdfData = {
-      ...snaggingWithDetails,
-      adminName: snaggingWithDetails.createdByAdmin.name || snaggingWithDetails.createdByAdmin.email,
-      ownerName: snaggingWithDetails.owner.name || snaggingWithDetails.owner.email,
-      acceptedAt: snaggingWithDetails.acceptedAt || new Date()
-    };
-
-    const pdfBuffer = await this.documentService.generatePDF('snagging-report-v1', pdfData);
-
-    // Upload to Cloudinary
-    const uploadResult = await this.cloudinaryService.uploadFileDirectly({
-      fileBuffer: pdfBuffer,
-      fileName: `snagging_${snagging.id}_regenerated.pdf`,
-      mimeType: 'application/pdf',
-      userId: user.id
-    });
-
-    // Update with new PDF URL
-    const updated = await this.snaggingRepo.update(id, {
-      pdfUrl: uploadResult.publicUrl,
-      pdfPublicId: uploadResult.key
-    });
-
     await this.auditService.create({
       action: AuditAction.SNAGGING_PDF_GENERATED,
       entityType: 'snagging',
       entityId: id,
       actorId: user.id,
       unitId: snagging.unitId,
-      changes: { pdfUrl: uploadResult.publicUrl, action: 'regenerated' }
+      changes: { action: 'regenerated' }
     });
 
-    return updated;
+    // Generate PDF in the background
+    this.generateAndUploadPdf(id, user.id).catch((pdfError) => {
+      logger.error({ err: pdfError, snaggingId: id }, 'Background PDF regeneration failed');
+    });
+
+    return snagging;
   }
 
   // Get stats for snaggings (ADMIN ONLY)
