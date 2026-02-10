@@ -8,6 +8,7 @@ import { AuditService } from '@/modules/audit-logs/services/audit.service';
 import { EmailService } from '@/common/services/email.service';
 import { NotificationService } from '@/modules/notifications/services/notification.service';
 import { NotificationRepository } from '@/modules/notifications/repositories/notification.repository';
+import { runBackgroundPdf } from '@/common/utils/background-pdf';
 
 // Minimal user type for request operations - needs id, role, email for PDF generation
 type RequestUser = Pick<User, 'id' | 'role' | 'email'> & { name?: string | null };
@@ -563,25 +564,15 @@ export class RequestService {
     // Refetch with relations for PDF generation
     updated = await this.requestRepo.findById(request.id);
 
-    // Generate PDF certificate with QR code
-    let pdfUrl: string | null = null;
-    let pdfPublicId: string | null = null;
-    try {
-      const pdfResult = await this.documentService.generateTenantRegistrationCertificate(updated, adminUser);
-      pdfUrl = pdfResult.pdfUrl;
-      pdfPublicId = pdfResult.pdfPublicId;
-
-      // Update request with PDF URL
-      updated = await this.requestRepo.update(request.id, {
-        pdfUrl,
-        pdfPublicId
+    // Generate PDF certificate in the background
+    runBackgroundPdf(async () => {
+      const freshRequest = await this.requestRepo.findById(request.id);
+      const pdfResult = await this.documentService.generateTenantRegistrationCertificate(freshRequest, adminUser);
+      await this.requestRepo.update(request.id, {
+        pdfUrl: pdfResult.pdfUrl,
+        pdfPublicId: pdfResult.pdfPublicId
       });
-
-      console.log(`📄 Tenant registration certificate generated: ${pdfUrl}`);
-    } catch (pdfError: any) {
-      console.error('❌ Failed to generate tenant registration certificate:', pdfError.message);
-      // Don't throw - PDF generation failure shouldn't break the approval
-    }
+    }, { entity: 'request', entityId: request.id });
 
     // Create audit log for request approval
     await this.auditService.create({
@@ -593,8 +584,7 @@ export class RequestService {
       changes: {
         before: request,
         after: updated,
-        note: 'Tenant registration request approved',
-        pdfUrl
+        note: 'Tenant registration request approved'
       }
     });
 
@@ -621,7 +611,7 @@ export class RequestService {
           request.tenantName,
           unit?.unitNumber || 'N/A',
           requestUrl,
-          pdfUrl
+          null
         );
         console.log(`📧 Tenant registration approval email sent to ${owner.email}`);
       }
@@ -647,7 +637,6 @@ export class RequestService {
       metadata: {
         requestId: request.id,
         tenantName: request.tenantName,
-        pdfUrl,
       },
     });
 

@@ -7,6 +7,7 @@ import { DocumentService } from '@/modules/docs/services/document.service';
 import { AuditService } from '@/modules/audit-logs/services/audit.service';
 import { NotificationService } from '@/modules/notifications/services/notification.service';
 import { NotificationRepository } from '@/modules/notifications/repositories/notification.repository';
+import { runBackgroundPdf } from '@/common/utils/background-pdf';
 
 // State transition rules (SIMPLIFIED FLOW)
 const STATE_TRANSITIONS: Record<HandoverStatus, HandoverStatus[]> = {
@@ -250,19 +251,11 @@ export class HandoverService {
       throw new ValidationError('Admin signature is required before sending to owner. Please sign the handover first.');
     }
 
-    // Create snapshot for PDF generation
-    const snapshot = await this.handoverRepo.createSnapshot(id);
-
-    // Generate PDF when sending to owner (includes admin signature if present)
-    const document = await this.documentService.generateHandoverAgreement(id, snapshot, user);
-
-    // Update status and PDF URL
+    // Update status immediately
     const updated = await this.prisma.handover.update({
       where: { id },
       data: {
         status: 'SENT_TO_OWNER',
-        pdfUrl: document.url,
-        pdfPublicId: document.key
       },
       include: {
         unit: true,
@@ -289,7 +282,7 @@ export class HandoverService {
       entityId: id,
       actorId: user.id,
       unitId: handover.unitId,
-      metadata: { message, pdfGenerated: true }
+      metadata: { message }
     });
 
     // Notify owner that handover was sent
@@ -305,6 +298,16 @@ export class HandoverService {
         unitNumber: handover.unit.unitNumber,
       },
     });
+
+    // Generate PDF in the background
+    runBackgroundPdf(async () => {
+      const snapshot = await this.handoverRepo.createSnapshot(id);
+      const document = await this.documentService.generateHandoverAgreement(id, snapshot, user);
+      await this.prisma.handover.update({
+        where: { id },
+        data: { pdfUrl: document.url, pdfPublicId: document.key }
+      });
+    }, { entity: 'handover', entityId: id });
 
     return updated;
   }
@@ -344,13 +347,7 @@ export class HandoverService {
       select: { name: true }
     });
 
-    // Create snapshot for PDF (includes signature URLs)
-    const snapshot = await this.handoverRepo.createSnapshot(id);
-
-    // Generate final PDF with both e-signatures
-    const document = await this.documentService.generateHandoverAgreement(id, snapshot, user);
-
-    // Update handover to ACCEPTED with signatures and PDF
+    // Update handover to ACCEPTED with signatures
     const updated = await this.prisma.handover.update({
       where: { id },
       data: {
@@ -358,8 +355,6 @@ export class HandoverService {
         ownerAcceptedAt: new Date(),
         adminSignature: admin?.name || 'Admin',
         ownerSignature: owner?.name || 'Owner',
-        pdfUrl: document.url,
-        pdfPublicId: document.key
       },
       include: {
         unit: true,
@@ -378,8 +373,6 @@ export class HandoverService {
       actorId: user.id,
       unitId: handover.unitId,
       metadata: {
-        pdfUrl: document.url,
-        documentId: document.id,
         adminSigned: !!handover.adminSignatureUrl,
         ownerSigned: !!handover.ownerSignatureUrl
       }
@@ -400,10 +393,17 @@ export class HandoverService {
       },
     });
 
-    return {
-      ...updated,
-      document
-    };
+    // Generate final PDF in the background
+    runBackgroundPdf(async () => {
+      const snapshot = await this.handoverRepo.createSnapshot(id);
+      const document = await this.documentService.generateHandoverAgreement(id, snapshot, user);
+      await this.prisma.handover.update({
+        where: { id },
+        data: { pdfUrl: document.url, pdfPublicId: document.key }
+      });
+    }, { entity: 'handover', entityId: id });
+
+    return updated;
   }
 
   // DEPRECATED: Old owner confirm (kept for backward compatibility)
@@ -527,12 +527,6 @@ export class HandoverService {
     const handover = await this.checkAccess(id, user, 'action');
     this.validateStateTransition(handover.status, 'COMPLETED');
 
-    // Create snapshot for PDF
-    const snapshot = await this.handoverRepo.createSnapshot(id);
-
-    // Generate PDF
-    const document = await this.documentService.generateHandoverAgreement(id, snapshot, user);
-
     // Update status to completed
     const updated = await this.handoverRepo.updateStatus(id, 'COMPLETED');
 
@@ -542,13 +536,19 @@ export class HandoverService {
       entityId: id,
       actorId: user.id,
       unitId: handover.unitId,
-      metadata: { documentId: document.id }
     });
 
-    return {
-      ...updated,
-      document
-    };
+    // Generate PDF in the background
+    runBackgroundPdf(async () => {
+      const snapshot = await this.handoverRepo.createSnapshot(id);
+      const document = await this.documentService.generateHandoverAgreement(id, snapshot, user);
+      await this.prisma.handover.update({
+        where: { id },
+        data: { pdfUrl: document.url, pdfPublicId: document.key }
+      });
+    }, { entity: 'handover', entityId: id });
+
+    return updated;
   }
 
   // Cancel handover
@@ -683,25 +683,12 @@ export class HandoverService {
       throw new ValidationError(`Cannot sign handover in ${handover.status} status`);
     }
 
-    // Update admin signature
-    await this.prisma.handover.update({
+    // Update admin signature and return immediately
+    const updated = await this.prisma.handover.update({
       where: { id },
       data: {
         adminSignatureUrl: data.signatureUrl,
         adminSignedAt: new Date()
-      }
-    });
-
-    // Auto-generate PDF when admin signs
-    const snapshot = await this.handoverRepo.createSnapshot(id);
-    const document = await this.documentService.generateHandoverAgreement(id, snapshot, user);
-
-    // Update handover with PDF URL
-    const updated = await this.prisma.handover.update({
-      where: { id },
-      data: {
-        pdfUrl: document.url,
-        pdfPublicId: document.key
       },
       include: {
         unit: true,
@@ -718,13 +705,20 @@ export class HandoverService {
       entityId: id,
       actorId: user.id,
       unitId: handover.unitId,
-      changes: { adminSignatureAdded: true, pdfGenerated: true }
+      changes: { adminSignatureAdded: true }
     });
 
-    return {
-      ...updated,
-      document
-    };
+    // Generate PDF in the background
+    runBackgroundPdf(async () => {
+      const snapshot = await this.handoverRepo.createSnapshot(id);
+      const document = await this.documentService.generateHandoverAgreement(id, snapshot, user);
+      await this.prisma.handover.update({
+        where: { id },
+        data: { pdfUrl: document.url, pdfPublicId: document.key }
+      });
+    }, { entity: 'handover', entityId: id });
+
+    return updated;
   }
 
   // Owner sign handover (can only sign in SENT_TO_OWNER status)
@@ -745,25 +739,12 @@ export class HandoverService {
       throw new ValidationError('Can only sign handover when it has been sent to you');
     }
 
-    // Update owner signature
-    await this.prisma.handover.update({
+    // Update owner signature and return immediately
+    const updated = await this.prisma.handover.update({
       where: { id },
       data: {
         ownerSignatureUrl: data.signatureUrl,
         ownerSignedAt: new Date()
-      }
-    });
-
-    // Auto-regenerate PDF with owner signature
-    const snapshot = await this.handoverRepo.createSnapshot(id);
-    const document = await this.documentService.generateHandoverAgreement(id, snapshot, user);
-
-    // Update handover with new PDF URL
-    const updated = await this.prisma.handover.update({
-      where: { id },
-      data: {
-        pdfUrl: document.url,
-        pdfPublicId: document.key
       },
       include: {
         unit: true,
@@ -780,13 +761,20 @@ export class HandoverService {
       entityId: id,
       actorId: user.id,
       unitId: handover.unitId,
-      changes: { ownerSignatureAdded: true, pdfRegenerated: true }
+      changes: { ownerSignatureAdded: true }
     });
 
-    return {
-      ...updated,
-      document
-    };
+    // Generate PDF in the background
+    runBackgroundPdf(async () => {
+      const snapshot = await this.handoverRepo.createSnapshot(id);
+      const document = await this.documentService.generateHandoverAgreement(id, snapshot, user);
+      await this.prisma.handover.update({
+        where: { id },
+        data: { pdfUrl: document.url, pdfPublicId: document.key }
+      });
+    }, { entity: 'handover', entityId: id });
+
+    return updated;
   }
 
   // Regenerate PDF (Admin only, for already sent/accepted handovers)
@@ -802,40 +790,25 @@ export class HandoverService {
       throw new ValidationError(`Cannot regenerate PDF in ${handover.status} status`);
     }
 
-    // Create snapshot for PDF
-    const snapshot = await this.handoverRepo.createSnapshot(id);
-
-    // Generate PDF
-    const document = await this.documentService.generateHandoverAgreement(id, snapshot, user);
-
-    // Update handover with new PDF URL
-    const updated = await this.prisma.handover.update({
-      where: { id },
-      data: {
-        pdfUrl: document.url,
-        pdfPublicId: document.key
-      },
-      include: {
-        unit: true,
-        owner: true,
-        createdByAdmin: true,
-        items: { orderBy: { sortOrder: 'asc' } },
-        attachments: true
-      }
-    });
-
     await this.auditService.create({
       action: 'HANDOVER_PDF_GENERATED' as AuditAction,
       entityType: 'handover',
       entityId: id,
       actorId: user.id,
       unitId: handover.unitId,
-      metadata: { pdfUrl: document.url, regenerated: true }
+      metadata: { regenerated: true }
     });
 
-    return {
-      ...updated,
-      document
-    };
+    // Generate PDF in the background
+    runBackgroundPdf(async () => {
+      const snapshot = await this.handoverRepo.createSnapshot(id);
+      const document = await this.documentService.generateHandoverAgreement(id, snapshot, user);
+      await this.prisma.handover.update({
+        where: { id },
+        data: { pdfUrl: document.url, pdfPublicId: document.key }
+      });
+    }, { entity: 'handover', entityId: id });
+
+    return handover;
   }
 }

@@ -10,6 +10,7 @@ import { NotificationRepository } from '@/modules/notifications/repositories/not
 import { CreateSnaggingDto, UpdateSnaggingDto, ScheduleAppointmentDto, SnaggingFiltersDto, UpdateSignatureDto } from '../dto/snagging.dto';
 import { createPaginatedResponse } from '../../../common/utils/pagination';
 import { logger } from '@config/logger';
+import { runBackgroundPdf } from '@/common/utils/background-pdf';
 
 // Type for authenticated user from JWT
 type AuthUser = { id: string; email: string; role: Role; name?: string | null };
@@ -321,9 +322,10 @@ export class SnaggingService {
     });
 
     // Generate PDF in the background
-    this.generateAndUploadPdf(id, user.id).catch((pdfError) => {
-      logger.error({ err: pdfError, snaggingId: id }, 'Background PDF generation failed after send to owner');
-    });
+    runBackgroundPdf(
+      () => this.generateAndUploadPdf(id, user.id),
+      { entity: 'snagging', entityId: id }
+    );
 
     return updated;
   }
@@ -514,9 +516,10 @@ export class SnaggingService {
     });
 
     // Generate final PDF in the background
-    this.generateAndUploadPdf(id, user.id).catch((pdfError) => {
-      logger.error({ err: pdfError, snaggingId: id }, 'Background PDF generation failed after accept');
-    });
+    runBackgroundPdf(
+      () => this.generateAndUploadPdf(id, user.id),
+      { entity: 'snagging', entityId: id }
+    );
 
     return updated;
   }
@@ -539,9 +542,10 @@ export class SnaggingService {
     });
 
     // Generate PDF in the background
-    this.generateAndUploadPdf(id, user.id).catch((pdfError) => {
-      logger.error({ err: pdfError, snaggingId: id }, 'Background PDF regeneration failed');
-    });
+    runBackgroundPdf(
+      () => this.generateAndUploadPdf(id, user.id),
+      { entity: 'snagging', entityId: id }
+    );
 
     return snagging;
   }
@@ -692,9 +696,10 @@ export class SnaggingService {
     });
 
     // Generate PDF in the background (don't await — return response immediately)
-    this.generateAndUploadPdf(id, user.id).catch((pdfError) => {
-      logger.error({ err: pdfError, snaggingId: id }, 'Background PDF generation failed after admin signature');
-    });
+    runBackgroundPdf(
+      () => this.generateAndUploadPdf(id, user.id),
+      { entity: 'snagging', entityId: id }
+    );
 
     return updated;
   }
@@ -737,9 +742,10 @@ export class SnaggingService {
     });
 
     // Generate PDF in the background (don't await — return response immediately)
-    this.generateAndUploadPdf(id, user.id).catch((pdfError) => {
-      logger.error({ err: pdfError, snaggingId: id }, 'Background PDF generation failed after owner signature');
-    });
+    runBackgroundPdf(
+      () => this.generateAndUploadPdf(id, user.id),
+      { entity: 'snagging', entityId: id }
+    );
 
     return updated;
   }
